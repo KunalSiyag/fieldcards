@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { parseSighting, describePhoto, GemmaError } from "../src/gemma";
+import { parseSighting, describePhoto, GemmaError, sentenceCase } from "../src/gemma";
 import { renderHTML, renderText, Deck } from "../src/cards";
 
 const good = {
@@ -36,6 +36,13 @@ describe("parseSighting", () => {
     assert.ok(s.clue.split(" ").length <= 25);
     assert.ok(s.subject.length > 0);
     assert.deepEqual(s.lookFor, []);
+  });
+
+  test("turns Title Case names into sentence case", () => {
+    assert.equal(sentenceCase("Dandelion Seed Heads"), "Dandelion seed heads");
+    assert.equal(sentenceCase("A sleek, dark bird"), "A sleek, dark bird");
+    assert.equal(sentenceCase("Moss"), "Moss");
+    assert.equal(sentenceCase("Tree-Clinging White Fungus"), "Tree-clinging white fungus");
   });
 
   test("rejects output that is not JSON", () => {

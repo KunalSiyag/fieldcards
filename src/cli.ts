@@ -108,6 +108,11 @@ async function main(): Promise<void> {
     const model = values.model ?? DEFAULT_MODEL;
     const cards: Card[] = [];
 
+    const toDescribe = photos.length - photos.filter((f) => known.has(crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex"))).length;
+    if (toDescribe > 0) {
+      process.stderr.write(`Describing ${toDescribe} photo${toDescribe === 1 ? "" : "s"} with ${model} on this computer. The first one also loads the model, which can take a minute or two.\n`);
+    }
+
     for (const [i, file] of photos.entries()) {
       const image = fs.readFileSync(file);
       const sha256 = crypto.createHash("sha256").update(image).digest("hex");

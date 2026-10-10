@@ -48,7 +48,7 @@ const SYSTEM_PROMPT = `You are a field naturalist making printable cards for an 
 You look at one photo taken outside and describe the single most findable thing in it.
 Write for someone standing outdoors with a printed card and no phone.
 Be concrete and visual. Prefer common names. If you are unsure of the exact species, say what kind of thing it is ("a small brown songbird") and set confidence to "low".
-The clue must help someone find the thing without naming it or its species.
+The clue must help someone find the thing without naming it or its species. Do not start the clue with "Seek".
 Never suggest eating, picking or touching anything.`;
 
 const USER_PROMPT = `Make a scavenger-hunt card from this photo. Reply with JSON only:
@@ -84,6 +84,13 @@ function clean(value: unknown, maxWords: number, fallback: string): string {
   return words.length > maxWords ? words.slice(0, maxWords).join(" ") + "…" : text;
 }
 
+/** "Dandelion Seed Heads" -> "Dandelion seed heads". Leaves single words and acronyms alone. */
+export function sentenceCase(text: string): string {
+  const words = text.split(" ");
+  const titleCased = words.length > 1 && words.every((w) => /^[A-Z][a-z'’]*(-[A-Za-z][a-z'’]*)*[,.]?$/.test(w));
+  return titleCased ? words.map((w, i) => (i === 0 ? w[0] + w.slice(1).toLowerCase() : w.toLowerCase())).join(" ") : text;
+}
+
 /** Validate and tidy the model's JSON so a sloppy answer can't break a card. */
 export function parseSighting(raw: string): Sighting {
   let data: Record<string, unknown>;
@@ -102,7 +109,7 @@ export function parseSighting(raw: string): Sighting {
     .filter(Boolean)
     .slice(0, 3);
 
-  const subject = clean(data.subject, 8, "Something worth a closer look");
+  const subject = sentenceCase(clean(data.subject, 8, "Something worth a closer look"));
   let clue = clean(data.clue, 24, "Look closely around you.");
   // The whole game breaks if the clue gives the answer away.
   if (subject.length > 3 && clue.toLowerCase().includes(subject.toLowerCase())) {

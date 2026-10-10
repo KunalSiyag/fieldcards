@@ -155,6 +155,12 @@ function wrap(text: string, cols: number): string[] {
   return wrapText(text, cols, measureCells);
 }
 
+/** Wrap with a hanging indent: "- smooth bark that" / "  peels in strips". */
+function hanging(prefix: string, text: string, cols: number): string[] {
+  const indent = " ".repeat(measureCells(prefix));
+  return wrap(text, cols - indent.length).map((line, i) => (i === 0 ? prefix : indent) + line);
+}
+
 /**
  * Plain-text cards, `cols` characters wide. Prints on any printer, including
  * a 58 mm receipt printer at 32 columns.
@@ -176,8 +182,8 @@ export function renderText(deck: Deck, cols = 48): string {
       })
     );
     if (deck.mode === "guide") out.push(...wrap(card.subject.toUpperCase(), width));
-    for (const feature of card.lookFor) out.push(...wrap(`- ${feature}`, width));
-    out.push(...wrap(`Where: ${card.where}`, width));
+    for (const feature of card.lookFor) out.push(...hanging("- ", feature, width));
+    out.push(...hanging("Where: ", card.where, width));
     out.push("[ ] found it   time: ______", "");
   });
 

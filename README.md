@@ -4,21 +4,24 @@ Turn your outdoor photos into a printable scavenger hunt, with an open-weight mo
 
 Each photo goes to **Gemma 3**, running locally through **Ollama**. Gemma works out what the photo shows and writes a clue for finding it that doesn't name it. **[altsvg](https://www.npmjs.com/package/altsvg)** then replaces every photo with an ASCII card holding that clue. You print the sheet, leave your phone at home, and go find the real things.
 
-<!-- TODO: replace with a card from a real Gemma run -->
 ```
-+-[ #02 bird ]-----------------+
++-[ #05 other ]----------------+
 |                              |
-|   Look up: a brown glider    |
-|   steering with a notched    |
-|            tail.             |
+|    Find a dark, weathered    |
+|    giant resting beside a    |
+|   rushing, silver stream.    |
 |                              |
 +------------------------------+
-- forked tail
-- long angled wings
-- slow circling
-Where: High above open lawns
+- Green moss covering its
+  surface
+- Dark, grey wood
+- A smooth, water-worn edge
+Where: Typically found in damp,
+       shaded forest streams.
 [ ] found it   time: ______
 ```
+
+That card came from a real `gemma3:4b` run on a photo of a mossy log across a forest waterfall.
 
 ## Why it runs locally
 
@@ -41,7 +44,7 @@ node dist/cli.js ./photos --title "Saturday in the park"
 
 Then open `fieldcards-out/index.html` and print it.
 
-<!-- TODO: add measured speed and hardware after the first real run -->
+Measured on a laptop with an RTX 3050 (4 GB): the first photo takes about two minutes because it also loads the model onto the GPU, and each photo after that takes 9 to 13 seconds. The model uses about 2.9 GB of GPU memory. Without a GPU it falls back to the CPU and is slower.
 
 ## What you get
 
@@ -79,6 +82,10 @@ Photos that have already been described are skipped on the next run. They are ma
 1. **Describe.** Each photo is sent to `POST /api/chat` on the local Ollama server, with a JSON schema in `format`. The model must return `subject`, `category`, `description`, `clue`, `look_for`, `where` and `confidence`.
 2. **Check.** The answer is validated and trimmed. If a clue contains its own answer, the answer is blanked out, and low-confidence answers are marked "best guess" on the card.
 3. **Draw.** altsvg's ASCII style replaces each photo with a monospace card the same size as the picture, in SVG for the printed sheet and as plain text for `cards.txt`.
+
+## What a 4B model gets right and wrong
+
+In testing, Gemma 3 4B reliably recognised common things (a dandelion clock, a maple leaf, a waterfall) and wrote clues that don't give the answer away. It was weaker on specifics: a crow came back as "a sleek, dark bird", and a soft pine pollen cone was described as "woody". Its own confidence rating is only a rough signal. That's why every answer lands in `deck.json`, where you can fix it before printing, and why low-confidence cards say "best guess".
 
 ## Safety
 
