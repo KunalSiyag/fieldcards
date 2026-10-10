@@ -1,0 +1,28 @@
+{
+  "name": "fieldcards",
+  "version": "0.1.0",
+  "description": "Turn your outdoor photos into printable scavenger-hunt cards with a local Gemma model. Offline, private, and the screen is the shortest part.",
+  "license": "ISC",
+  "type": "commonjs",
+  "bin": {
+    "fieldcards": "dist/cli.js"
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=18.3"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --require ts-node/register --test test/*.test.ts",
+    "start": "node dist/cli.js"
+  },
+  "keywords": ["gemma", "ollama", "local-ai", "scavenger-hunt", "nature", "printable", "offline", "ascii"],
+  "dependencies": {
+    "altsvg": "file:../altsvg"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
