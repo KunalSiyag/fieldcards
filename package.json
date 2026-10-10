@@ -29,7 +29,7 @@
     "ascii"
   ],
   "dependencies": {
-    "altsvg": "file:../altsvg"
+    "altsvg": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
