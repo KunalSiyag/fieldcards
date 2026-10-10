@@ -7,7 +7,9 @@
   "bin": {
     "fieldcards": "dist/cli.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=18.3"
   },
@@ -16,7 +18,16 @@
     "test": "node --require ts-node/register --test test/*.test.ts",
     "start": "node dist/cli.js"
   },
-  "keywords": ["gemma", "ollama", "local-ai", "scavenger-hunt", "nature", "printable", "offline", "ascii"],
+  "keywords": [
+    "gemma",
+    "ollama",
+    "local-ai",
+    "scavenger-hunt",
+    "nature",
+    "printable",
+    "offline",
+    "ascii"
+  ],
   "dependencies": {
     "altsvg": "file:../altsvg"
   },
@@ -24,5 +35,6 @@
     "@types/node": "^25.3.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
-  }
+  },
+  "author": "Kunal Siyag"
 }
