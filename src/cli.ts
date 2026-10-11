@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { parseArgs } from "util";
 import { describePhoto, GemmaError, DEFAULT_HOST, DEFAULT_MODEL } from "./gemma";
 import { renderHTML, renderText, Card, Deck, Mode } from "./cards";
+import { photoToArt } from "./art";
 
 const USAGE = `fieldcards: turn your outdoor photos into printable scavenger-hunt cards, offline.
 
@@ -21,6 +22,8 @@ Options:
       --paper <size>     a4 or letter (default a4)
       --cols <n>         Width of cards.txt in characters (default 48; 32 for a receipt printer)
       --from <file>      Load cards from a deck.json instead of running the model
+      --no-art           Guide mode: don't print the photos as ASCII art
+      --hint-art         Hunt mode: add a small, blurry ASCII picture to each card as a hint
   -h, --help             Show this help
 
 Writes index.html (print it), cards.txt (plain text) and deck.json (edit it, then use --from).`;
@@ -71,6 +74,8 @@ async function main(): Promise<void> {
         paper: { type: "string" },
         cols: { type: "string" },
         from: { type: "string" },
+        "no-art": { type: "boolean" },
+        "hint-art": { type: "boolean" },
         help: { type: "boolean", short: "h" },
       },
     });
@@ -118,15 +123,17 @@ async function main(): Promise<void> {
       const sha256 = crypto.createHash("sha256").update(image).digest("hex");
       const tag = `[${i + 1}/${photos.length}] ${path.basename(file)}`;
       const cached = known.get(sha256);
+      // ASCII art comes from the pixels, not the model, so it's cheap to redo.
+      const art = photoToArt(image) ?? undefined;
       if (cached && previous?.model === model) {
-        cards.push({ ...cached, file: path.basename(file) });
+        cards.push({ ...cached, file: path.basename(file), art: cached.art ?? art });
         process.stderr.write(`${tag} -> ${cached.subject} (already described)\n`);
         continue;
       }
       const started = Date.now();
       try {
         const sighting = await describePhoto(image, { model, host: values.host });
-        cards.push({ ...sighting, file: path.basename(file), sha256 });
+        cards.push({ ...sighting, file: path.basename(file), sha256, art });
         const secs = ((Date.now() - started) / 1000).toFixed(1);
         process.stderr.write(`${tag} -> ${sighting.subject} (${sighting.confidence}, ${secs}s)\n`);
       } catch (err) {
@@ -145,8 +152,10 @@ async function main(): Promise<void> {
   }
 
   fs.writeFileSync(deckFile, JSON.stringify(deck, null, 2) + "\n");
-  fs.writeFileSync(path.join(outDir, "index.html"), renderHTML(deck, { paper }));
-  fs.writeFileSync(path.join(outDir, "cards.txt"), renderText(deck, cols));
+  // Art is on by default in a guide; a hunt only gets blurry hints when asked.
+  const art = deck.mode === "guide" ? !values["no-art"] : !!values["hint-art"];
+  fs.writeFileSync(path.join(outDir, "index.html"), renderHTML(deck, { paper, art }));
+  fs.writeFileSync(path.join(outDir, "cards.txt"), renderText(deck, cols, art));
 
   process.stderr.write(
     `\nWrote ${deck.cards.length} cards to ${outDir}/\n` +

@@ -1,5 +1,6 @@
 import { generateAltSVG, generateAltASCII, wrapText, measureCells } from "altsvg";
 import type { Sighting } from "./gemma";
+import { artSVG, fitArt, frameArt } from "./art";
 
 export type Mode = "hunt" | "guide";
 
@@ -8,6 +9,8 @@ export interface Card extends Sighting {
   file: string;
   /** SHA-256 of the photo, so re-runs only describe new photos. */
   sha256: string;
+  /** The photo as ASCII art, 64 columns wide. Missing for formats we can't decode. */
+  art?: string[];
 }
 
 export interface Deck {
@@ -20,6 +23,17 @@ export interface Deck {
 
 export interface RenderOptions {
   paper?: "a4" | "letter";
+  /**
+   * Print the photos as ASCII art. In a guide each card shows the full picture
+   * (default on). In a hunt each card gets a small, blurry hint (default off),
+   * since a sharp picture would give the answer away.
+   */
+  art?: boolean;
+}
+
+/** Whether to draw art for this deck, given the user's choice. */
+export function wantsArt(mode: Mode, art: boolean | undefined): boolean {
+  return art ?? mode === "guide";
 }
 
 const esc = (s: string) =>
@@ -33,8 +47,8 @@ export function cardText(card: Card, mode: Mode): string {
 }
 
 /** The ASCII "photo" for one card: the picture is replaced by words you take outside. */
-export function cardSVG(card: Card, index: number, mode: Mode): string {
-  return generateAltSVG(330, 118, cardText(card, mode), {
+export function cardSVG(card: Card, index: number, mode: Mode, width = 330, height = 118): string {
+  return generateAltSVG(width, height, cardText(card, mode), {
     style: "ascii",
     label: `${num(index)} ${card.category}`,
     showSize: false,
@@ -45,19 +59,43 @@ export function cardSVG(card: Card, index: number, mode: Mode): string {
   });
 }
 
-function cardHTML(card: Card, index: number, mode: Mode): string {
-  const heading = mode === "hunt" ? `Find ${num(index)}` : esc(card.subject);
-  const unsure = card.confidence === "low" ? `<span class="unsure">best guess</span>` : "";
+function details(card: Card): string {
   return `
-    <article class="card">
-      <header><h2>${heading}</h2>${unsure}</header>
-      <div class="art">${cardSVG(card, index, mode)}</div>
       <dl>
         <dt>Look for</dt>
         <dd><ul>${card.lookFor.map((f) => `<li>${esc(f)}</li>`).join("")}</ul></dd>
         <dt>Where</dt>
         <dd>${esc(card.where)}</dd>
-      </dl>
+      </dl>`;
+}
+
+function cardHTML(card: Card, index: number, mode: Mode, art: boolean): string {
+  const heading = mode === "hunt" ? `Find ${num(index)}` : esc(card.subject);
+  const unsure = card.confidence === "low" ? `<span class="unsure">best guess</span>` : "";
+  let body: string;
+
+  if (art && card.art?.length && mode === "guide") {
+    // The photo, printed in characters, then what it is.
+    const picture = frameArt(fitArt(card.art, 46, 13), `${num(index)} ${card.category}`);
+    // Size by column count so portrait photos print narrower, not with bigger characters.
+    const share = Math.round((picture[0].length / 48) * 1000) / 10;
+    body = `
+      <div class="art photo" style="width:${share}%">${artSVG(picture, picture[0].length * 6.875)}</div>
+      <p class="desc">${esc(card.description)}</p>${details(card)}`;
+  } else if (art && card.art?.length) {
+    // Hunt: the clue, plus a coarse picture that hints without telling.
+    const hint = frameArt(fitArt(card.art, 16, 5), "hint");
+    const hintShare = Math.round((hint[0].length / 18) * 1000) / 10;
+    body = `
+      <div class="with-hint"><div class="hint"><div style="width:${hintShare}%">${artSVG(hint, hint[0].length * 7.33)}</div></div><div class="art">${cardSVG(card, index, mode, 215, 128)}</div></div>${details(card)}`;
+  } else {
+    body = `
+      <div class="art">${cardSVG(card, index, mode)}</div>${details(card)}`;
+  }
+
+  return `
+    <article class="card">
+      <header><h2>${heading}</h2>${unsure}</header>${body}
       <footer><span class="box"></span> Found it <span class="line"></span> time</footer>
     </article>`;
 }
@@ -80,6 +118,7 @@ function answerKey(deck: Deck): string {
 /** A print-first HTML page: six cards to a sheet, and an answer key for hunts. */
 export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   const paper = options.paper === "letter" ? "letter" : "A4";
+  const art = wantsArt(deck.mode, options.art);
   const intro =
     deck.mode === "hunt"
       ? `Find all ${deck.cards.length}. Each card hides a photo behind a clue. Tick it off when you spot the real thing.`
@@ -93,7 +132,7 @@ export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(deck.title)}</title>
 <style>
-  @page { size: ${paper}; margin: 11mm; }
+  @page { size: ${paper}; margin: 9mm 10mm; }
   * { box-sizing: border-box; }
   :root { color-scheme: light; }
   body {
@@ -106,13 +145,17 @@ export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   h1 { font: 700 22px/1.2 ui-monospace, Menlo, Consolas, monospace; margin: 0; }
   .meta { font: 12px ui-monospace, Menlo, Consolas, monospace; color: #555; white-space: nowrap; }
   .intro { margin: 6px 0 10px; }
-  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4mm; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3.5mm; }
   @media (max-width: 560px) { .grid { grid-template-columns: minmax(0, 1fr); } }
   .card { border: 1px dashed #888; padding: 3mm 4mm; break-inside: avoid; display: grid; gap: 1.5mm; }
   .card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
   .card h2 { font: 700 15px/1.2 ui-monospace, Menlo, Consolas, monospace; margin: 0; }
   .unsure { font: 11px ui-monospace, Menlo, Consolas, monospace; color: #555; border: 1px solid #aaa; border-radius: 3px; padding: 0 4px; }
   .art svg { display: block; width: 100%; height: auto; }
+  .art.photo { margin: 0 auto; }
+  .desc { margin: 0; font-size: 12.5px; }
+  .with-hint { display: grid; grid-template-columns: 34% minmax(0, 1fr); gap: 2mm; align-items: center; }
+  .hint svg { display: block; width: 100%; height: auto; }
   dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.5mm 3mm; font-size: 12px; line-height: 1.35; }
   dt { font: 700 10.5px/1.6 ui-monospace, Menlo, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; color: #555; }
   dd { margin: 0; }
@@ -141,10 +184,10 @@ export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
 <main class="sheet">
   <div class="top"><h1>${esc(deck.title)}</h1><span class="meta">${esc(date)} · ${deck.mode}</span></div>
   <p class="intro">${intro}</p>
-  <div class="grid">${deck.cards.map((c, i) => cardHTML(c, i, deck.mode)).join("")}
+  <div class="grid">${deck.cards.map((c, i) => cardHTML(c, i, deck.mode, art)).join("")}
   </div>
   ${deck.mode === "hunt" ? answerKey(deck) : ""}
-  <p class="note">Made offline: ${esc(deck.model)} described the photos on this computer, and altsvg drew the cards. Look, don't pick: never eat or touch anything because a card says what it is.</p>
+  <p class="note">Made offline: ${esc(deck.model)} described the photos on this computer, and altsvg drew the cards${art ? ", with the photos printed in characters" : ""}. Look, don't pick: never eat or touch anything because a card says what it is.</p>
 </main>
 </body>
 </html>
@@ -165,7 +208,8 @@ function hanging(prefix: string, text: string, cols: number): string[] {
  * Plain-text cards, `cols` characters wide. Prints on any printer, including
  * a 58 mm receipt printer at 32 columns.
  */
-export function renderText(deck: Deck, cols = 48): string {
+export function renderText(deck: Deck, cols = 48, artOption?: boolean): string {
+  const art = wantsArt(deck.mode, artOption);
   const width = Math.max(24, cols);
   // generateAltASCII sizes the grid from pixels: 0.6em per column, 1.2em per row at 12px.
   const px = width * 0.6 * 12;
@@ -173,15 +217,22 @@ export function renderText(deck: Deck, cols = 48): string {
   const out: string[] = [rule, ...wrap(deck.title.toUpperCase(), width), rule, ""];
 
   deck.cards.forEach((card, i) => {
-    out.push(
-      generateAltASCII(px, 7 * 14.4, cardText(card, deck.mode), {
-        style: "ascii",
-        label: `${num(i)} ${card.category}`,
-        showSize: false,
-        fontSize: 12,
-      })
-    );
-    if (deck.mode === "guide") out.push(...wrap(card.subject.toUpperCase(), width));
+    const hasArt = art && !!card.art?.length;
+    if (hasArt && deck.mode === "guide") {
+      out.push(...frameArt(fitArt(card.art!, width - 2, 13), `${num(i)} ${card.category}`));
+      out.push(...wrap(card.subject.toUpperCase(), width), ...wrap(card.description, width));
+    } else {
+      if (hasArt) out.push(...frameArt(fitArt(card.art!, Math.min(16, width - 2), 6), "hint"));
+      out.push(
+        generateAltASCII(px, 7 * 14.4, cardText(card, deck.mode), {
+          style: "ascii",
+          label: `${num(i)} ${card.category}`,
+          showSize: false,
+          fontSize: 12,
+        })
+      );
+      if (deck.mode === "guide") out.push(...wrap(card.subject.toUpperCase(), width));
+    }
     for (const feature of card.lookFor) out.push(...hanging("- ", feature, width));
     out.push(...hanging("Where: ", card.where, width));
     out.push("[ ] found it   time: ______", "");
