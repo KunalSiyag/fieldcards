@@ -22,8 +22,8 @@ export interface Deck {
 }
 
 /**
- * How to print the photos: "full" draws each photo in characters (default),
- * "hint" draws a small, blurry version for a harder hunt, "none" leaves them out.
+ * How to print the photos: "none" prints text cards only (default), "full"
+ * draws each photo in characters, "hint" draws a small, blurry version.
  */
 export type ArtMode = "full" | "hint" | "none";
 
@@ -123,7 +123,7 @@ function answerKey(deck: Deck): string {
 /** A print-first HTML page: six cards to a sheet, and an answer key for hunts. */
 export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   const paper = options.paper === "letter" ? "letter" : "A4";
-  const art: ArtMode = options.art ?? "full";
+  const art: ArtMode = options.art ?? "none";
   const intro =
     deck.mode === "hunt"
       ? deck.cards.length === 1
@@ -217,7 +217,7 @@ function hanging(prefix: string, text: string, cols: number): string[] {
  * Plain-text cards, `cols` characters wide. Prints on any printer, including
  * a 58 mm receipt printer at 32 columns.
  */
-export function renderText(deck: Deck, cols = 48, art: ArtMode = "full"): string {
+export function renderText(deck: Deck, cols = 48, art: ArtMode = "none"): string {
   const width = Math.max(24, cols);
   // generateAltASCII sizes the grid from pixels: 0.6em per column, 1.2em per row at 12px.
   const px = width * 0.6 * 12;

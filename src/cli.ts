@@ -23,8 +23,8 @@ Options:
       --cols <n>         Width of cards.txt in characters (default 48; 32 for a receipt printer)
       --from <file>      Load cards from a deck.json instead of running the model
       --stdout           Also print the text cards to the terminal (pipe to "lp" to print them)
-      --art <style>      How to print the photos: full (in characters, default), hint (small
-                         and blurry, for a harder hunt) or none
+      --art <style>      Also print the photos as ASCII art: full, hint (small and blurry)
+                         or none (default)
       --no-art           Same as --art none
       --hint-art         Same as --art hint
   -h, --help             Show this help
@@ -157,7 +157,7 @@ async function main(): Promise<void> {
   }
 
   fs.writeFileSync(deckFile, JSON.stringify(deck, null, 2) + "\n");
-  const art = (values["no-art"] ? "none" : values["hint-art"] ? "hint" : values.art ?? "full") as ArtMode;
+  const art = (values["no-art"] ? "none" : values["hint-art"] ? "hint" : values.art ?? "none") as ArtMode;
   if (!["full", "hint", "none"].includes(art)) fail("--art must be full, hint or none");
   fs.writeFileSync(path.join(outDir, "index.html"), renderHTML(deck, { paper, art }));
   const text = renderText(deck, cols, art);

@@ -2,7 +2,7 @@
 
 Turn your outdoor photos into a printable scavenger hunt, with an open-weight model running on your own computer.
 
-Each photo goes to **Gemma 3**, running locally through **Ollama**. Gemma works out what the photo shows and writes a clue for finding it that doesn't name it. The photo is printed in ASCII characters, straight from its pixels, and **[altsvg](https://www.npmjs.com/package/altsvg)** draws the clue beneath it as an ASCII card. You print the sheet, leave your phone at home, and go find the real things.
+Each photo goes to **Gemma 3**, running locally through **Ollama**. Gemma works out what the photo shows and writes a clue for finding it that doesn't name it. **[altsvg](https://www.npmjs.com/package/altsvg)** then replaces every photo with a printed ASCII card holding that clue, the way altsvg turns alt text into a placeholder. You print the sheet, leave your phone at home, and go find the real things.
 
 ```
 +-[ #05 other ]----------------+
@@ -23,7 +23,7 @@ Where: Typically found in damp,
 
 That card came from a real `gemma3:4b` run on a photo of a mossy log across a forest waterfall.
 
-Every card also prints the photo itself in characters. Here's the crow photo from the same run, in guide mode:
+With `--art full`, cards also print the photo itself in characters. It works best on simple subjects against a plain background, like this crow from the same run:
 
 ```
 +-[ #01 bird ]---------------------------------+
@@ -101,14 +101,14 @@ node dist/cli.js ./photos
 
 Two modes:
 
-- `--mode hunt` (the default): the photo in characters, a clue, and what to look for. The names are on a separate answer page.
-- `--mode guide`: the photo in characters, its name and a description, like a pocket field guide for a walk you've already done.
+- `--mode hunt` (the default): a clue card and what to look for. The names are on a separate answer page.
+- `--mode guide`: the name and a description, like a pocket field guide for a walk you've already done.
 
-`--art` sets how the photos print:
+`--art` optionally prints the photos too:
 
-- `full` (the default) draws each photo in characters, up to 70 columns wide.
+- `none` (the default) prints text cards only.
+- `full` draws each photo in characters, up to 70 columns wide.
 - `hint` draws a small, blurry version beside the clue, for a harder hunt.
-- `none` leaves the photos out and prints text cards only.
 
 Photo art works with JPEG and PNG, and follows the camera's rotation tag, so portrait phone photos come out the right way up.
 
@@ -127,7 +127,7 @@ fieldcards --from <deck.json> [options]
       --cols <n>       Width of cards.txt in characters (default 48)
       --from <file>    Reprint a deck.json without running the model
       --stdout         Also print the text cards to the terminal
-      --art <style>    full (photo in characters, default), hint (small and blurry) or none
+      --art <style>    none (default), full (photo in characters) or hint (small and blurry)
 ```
 
 Photos that have already been described are skipped on the next run. They are matched by content hash, so you can add photos to the folder and run it again.
