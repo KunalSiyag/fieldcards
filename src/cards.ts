@@ -1,7 +1,8 @@
 import { generateAltSVG, generateAltASCII, wrapText, measureCells } from "altsvg";
 import type { Sighting } from "./gemma";
 import { artSVG, fitArt, frameArt, gridSVG } from "./art";
-import { SKETCHES, pickSketch } from "./sketches";
+import { rasterize, Shape } from "./draw";
+import type { Cell, CellKind } from "./anim";
 
 export type Mode = "hunt" | "guide";
 
@@ -12,6 +13,10 @@ export interface Card extends Sighting {
   sha256: string;
   /** The photo as ASCII art, 96 columns wide. Missing for formats we can't decode. */
   art?: string[];
+  /** Gemma's own drawing of the subject, as shapes on a 100 x 60 canvas. */
+  drawing?: Shape[];
+  /** The model that made the drawing, so a different --draw-model redraws it. */
+  drawModel?: string;
 }
 
 export interface Deck {
@@ -24,12 +29,12 @@ export interface Deck {
 
 /**
  * What each card shows above the text:
- * - "sketch" (default): a hand-drawn ASCII illustration of the subject, picked by Gemma
+ * - "drawing" (default): Gemma's own drawing of what it saw, rendered as ASCII line art
  * - "photo": the photo itself, converted to characters
  * - "hint": a small, blurry version of the photo beside the clue
  * - "none": text cards only
  */
-export type ArtMode = "sketch" | "photo" | "hint" | "none";
+export type ArtMode = "drawing" | "photo" | "hint" | "none";
 
 export interface RenderOptions {
   paper?: "a4" | "letter";
@@ -64,45 +69,42 @@ export function cardSVG(card: Card, index: number, mode: Mode, width = 330, heig
   });
 }
 
+const cellsOf = (line: string, kind: CellKind): Cell[] => [...line].map((ch) => ({ ch, kind }));
+
 /**
- * A hero-style card: a +-[ #01 bird ]--+ frame holding the illustration, with
- * the clue (or, in a guide, the name) underneath. Returns two layers of
- * equal-width lines: the frame and drawing, and the text, so each can be styled.
+ * A hero-style card as a grid of cells: a +-[ #01 bird ]--+ frame holding
+ * Gemma's drawing, with the clue (or, in a guide, the name) underneath. The
+ * same grid is drawn as SVG on paper, printed in cards.txt, and animated in the
+ * terminal, so all three always match.
  */
-export function sketchCard(card: Card, index: number, mode: Mode, cols: number): { frame: string[]; text: string[] } {
+export function drawingCard(card: Card, index: number, mode: Mode, cols: number): Cell[][] {
   const inner = cols - 2;
-  const art = SKETCHES[pickSketch(card)].filter((l) => measureCells(l) <= inner - 2);
+  const art = card.drawing?.length ? rasterize(card.drawing, inner - 2, 12) : [];
   const words = wrap(mode === "hunt" ? card.clue : card.subject, inner - 4);
 
   const tag = `[ ${num(index)} ${card.category} ]`;
   const top = tag.length + 4 <= cols ? "+-" + tag + "-".repeat(cols - tag.length - 3) + "+" : "+" + "-".repeat(inner) + "+";
-  const blank = " ".repeat(inner);
-  const centre = (line: string) => {
+  const side = (content: Cell[]): Cell[] => [{ ch: "|", kind: "frame" }, ...content, { ch: "|", kind: "frame" }];
+  const blank = () => side(cellsOf(" ".repeat(inner), "plain"));
+  const centred = (line: string, kind: CellKind) => {
     const left = Math.floor((inner - measureCells(line)) / 2);
-    return " ".repeat(left) + line + " ".repeat(inner - left - measureCells(line));
+    return side(cellsOf(" ".repeat(left) + line + " ".repeat(Math.max(0, inner - left - measureCells(line))), kind));
   };
-  // Centre the drawing as a block, so its shape isn't skewed line by line.
-  const artWidth = Math.max(0, ...art.map(measureCells));
-  const artLeft = Math.floor((inner - artWidth) / 2);
-  const artRow = (line: string) => " ".repeat(artLeft) + line + " ".repeat(inner - artLeft - measureCells(line));
 
-  const frame = [top, `|${blank}|`, ...art.map((l) => `|${artRow(l)}|`), `|${blank}|`];
-  const text = frame.map(() => " ".repeat(cols));
-  for (const w of words) {
-    frame.push(`|${blank}|`);
-    text.push(` ${centre(w)} `);
-  }
-  frame.push(`|${blank}|`, "+" + "-".repeat(inner) + "+");
-  text.push(" ".repeat(cols), " ".repeat(cols));
-  return { frame, text };
+  const grid: Cell[][] = [cellsOf(top, "frame"), blank()];
+  if (art.length) grid.push(...art.map((l) => centred(l, "art")), blank());
+  grid.push(...words.map((w) => centred(w, "text")), blank(), cellsOf("+" + "-".repeat(inner) + "+", "frame"));
+  return grid;
 }
 
-/** Draw the two layers of a sketch card as one SVG. */
-function sketchSVG(layers: { frame: string[]; text: string[] }, width: number, label: string): string {
+/** Draw a card grid as SVG: frame, drawing and clue each in their own style. */
+function gridCardSVG(grid: Cell[][], width: number, label: string): string {
+  const layer = (kind: CellKind) => grid.map((row) => row.map((c) => (c.kind === kind ? c.ch : " ")).join(""));
   return gridSVG(
     [
-      { lines: layers.frame, fill: "#4a4a4a" },
-      { lines: layers.text, fill: "#111111", weight: 700 },
+      { lines: layer("frame"), fill: "#8a8a8a" },
+      { lines: layer("art"), fill: "#222222", weight: 700 },
+      { lines: layer("text"), fill: "#111111", weight: 700 },
     ],
     width,
     label
@@ -125,10 +127,10 @@ function cardHTML(card: Card, index: number, mode: Mode, art: ArtMode): string {
   const label = `${num(index)} ${card.category}`;
   let body: string;
 
-  if (art === "sketch") {
-    const layers = sketchCard(card, index, mode, 46);
+  if (art === "drawing") {
+    const grid = drawingCard(card, index, mode, 46);
     body = `
-      <div class="art sketch">${sketchSVG(layers, CARD_PX, mode === "hunt" ? card.clue : card.subject)}</div>${mode === "guide" ? `<p class="desc">${esc(card.description)}</p>` : ""}${details(card)}`;
+      <div class="art drawing">${gridCardSVG(grid, CARD_PX, mode === "hunt" ? card.clue : card.subject)}</div>${mode === "guide" ? `<p class="desc">${esc(card.description)}</p>` : ""}${details(card)}`;
   } else if (art === "photo" && card.art?.length) {
     // The photo printed in characters. Sized by column count, so portrait
     // photos print narrower rather than with bigger characters.
@@ -176,7 +178,7 @@ function answerKey(deck: Deck): string {
 /** A print-first HTML page: six cards to a sheet, and an answer key for hunts. */
 export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   const paper = options.paper === "letter" ? "letter" : "A4";
-  const art: ArtMode = options.art ?? "sketch";
+  const art: ArtMode = options.art ?? "drawing";
   const intro =
     deck.mode === "hunt"
       ? deck.cards.length === 1
@@ -249,7 +251,7 @@ export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   <div class="grid">${deck.cards.map((c, i) => cardHTML(c, i, deck.mode, art)).join("")}
   </div>
   ${deck.mode === "hunt" ? answerKey(deck) : ""}
-  <p class="note">Made offline: ${esc(deck.model)} described the photos on this computer, and altsvg laid out the cards${art === "sketch" ? ", with a drawing Gemma picked for each one" : art === "photo" ? ", with the photos printed in characters" : ""}. Look, don't pick: never eat or touch anything because a card says what it is.</p>
+  <p class="note">Made offline: ${esc(deck.model)} described the photos on this computer, and drew a picture of each one${art === "photo" ? "; the photos are printed in characters" : ""}. Look, don't pick: never eat or touch anything because a card says what it is.</p>
 </main>
 </body>
 </html>
@@ -267,44 +269,48 @@ function hanging(prefix: string, text: string, cols: number): string[] {
 }
 
 /**
+ * One card as a block of cells for the terminal and cards.txt: the framed
+ * picture and clue, then what to look for and where.
+ */
+export function cardBlock(card: Card, index: number, mode: Mode, cols: number, art: ArtMode = "drawing"): Cell[][] {
+  const width = Math.max(24, cols);
+  const label = `${num(index)} ${card.category}`;
+  const block: Cell[][] = [];
+  const plain = (lines: string[]) => block.push(...lines.map((l) => cellsOf(l, "plain")));
+
+  if (art === "drawing") {
+    block.push(...drawingCard(card, index, mode, width));
+    if (mode === "guide") plain(wrap(card.description, width));
+  } else if (art === "photo" && card.art?.length) {
+    block.push(...frameArt(fitArt(card.art, width - 2, 16), label).map((l) => cellsOf(l, "art")));
+    if (mode === "guide") plain([...wrap(card.subject.toUpperCase(), width), ...wrap(card.description, width)]);
+    else plain(wrap(`> ${card.clue}`, width));
+  } else {
+    if (art === "hint" && card.art?.length) block.push(...frameArt(fitArt(card.art, Math.min(16, width - 2), 6), "hint").map((l) => cellsOf(l, "art")));
+    // generateAltASCII sizes its grid from pixels: 0.6em per column, 1.2em per row at 12px.
+    // A fixed font size keeps the frame exactly `width` columns; it grows downwards to fit.
+    const text = cardText(card, mode);
+    const rows = Math.max(7, wrap(text, width - 6).length + 4);
+    plain(generateAltASCII(width * 7.2, rows * 14.4, text, { style: "ascii", label, showSize: false, fontSize: 12, minFontSize: 12 }).split("\n"));
+    if (mode === "guide") plain(wrap(card.subject.toUpperCase(), width));
+  }
+  for (const feature of card.lookFor) plain(hanging("- ", feature, width));
+  plain(hanging("Where: ", card.where, width));
+  plain(["[ ] found it   time: ______"]);
+  return block;
+}
+
+/**
  * Plain-text cards, `cols` characters wide. Prints on any printer, including
  * a 58 mm receipt printer at 32 columns.
  */
-export function renderText(deck: Deck, cols = 48, art: ArtMode = "sketch"): string {
+export function renderText(deck: Deck, cols = 48, art: ArtMode = "drawing"): string {
   const width = Math.max(24, cols);
-  // generateAltASCII sizes the grid from pixels: 0.6em per column, 1.2em per row at 12px.
-  const px = width * 0.6 * 12;
   const rule = "=".repeat(width);
   const out: string[] = [rule, ...wrap(deck.title.toUpperCase(), width), rule, ""];
-
   deck.cards.forEach((card, i) => {
-    const label = `${num(i)} ${card.category}`;
-    // Fix the font size so the frame is exactly `width` columns, and grow the
-    // frame downwards to fit the text instead of shrinking it.
-    const clueFrame = () => {
-      const text = cardText(card, deck.mode);
-      const rows = Math.max(7, wrap(text, width - 6).length + 4);
-      return generateAltASCII(px, rows * 14.4, text, { style: "ascii", label, showSize: false, fontSize: 12, minFontSize: 12 });
-    };
-
-    if (art === "sketch") {
-      const { frame, text } = sketchCard(card, i, deck.mode, width);
-      out.push(...frame.map((line, r) => [...line].map((ch, c) => ([...text[r]][c] !== " " ? [...text[r]][c] : ch)).join("")));
-      if (deck.mode === "guide") out.push(...wrap(card.description, width));
-    } else if (art === "photo" && card.art?.length) {
-      out.push(...frameArt(fitArt(card.art, width - 2, 16), label));
-      if (deck.mode === "guide") out.push(...wrap(card.subject.toUpperCase(), width), ...wrap(card.description, width));
-      else out.push(...wrap(`> ${card.clue}`, width));
-    } else {
-      if (art === "hint" && card.art?.length) out.push(...frameArt(fitArt(card.art, Math.min(16, width - 2), 6), "hint"));
-      out.push(clueFrame());
-      if (deck.mode === "guide") out.push(...wrap(card.subject.toUpperCase(), width));
-    }
-    for (const feature of card.lookFor) out.push(...hanging("- ", feature, width));
-    out.push(...hanging("Where: ", card.where, width));
-    out.push("[ ] found it   time: ______", "");
+    out.push(...cardBlock(card, i, deck.mode, width, art).map((row) => row.map((c) => c.ch).join("").replace(/\s+$/, "")), "");
   });
-
   if (deck.mode === "hunt") {
     out.push(rule, "ANSWERS (no peeking)", rule);
     deck.cards.forEach((card, i) => out.push(...wrap(`${num(i)}  ${card.subject} (${card.confidence})`, width)));

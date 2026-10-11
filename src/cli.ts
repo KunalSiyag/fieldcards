@@ -4,8 +4,10 @@ import path from "path";
 import crypto from "crypto";
 import { parseArgs } from "util";
 import { describePhoto, GemmaError, DEFAULT_HOST, DEFAULT_MODEL } from "./gemma";
-import { renderHTML, renderText, ArtMode, Card, Deck, Mode } from "./cards";
+import { renderHTML, renderText, cardBlock, ArtMode, Card, Deck, Mode } from "./cards";
 import { photoToArt } from "./art";
+import { drawSubject } from "./draw";
+import { CardAnimator } from "./anim";
 
 const USAGE = `fieldcards: turn your outdoor photos into printable scavenger-hunt cards, offline.
 
@@ -17,14 +19,16 @@ Options:
   -o, --out <dir>        Output folder (default ./fieldcards-out)
   -t, --title <text>     Title printed on the sheet (default "Field Cards")
   -m, --mode <mode>      hunt (clues, answer key) or guide (names and descriptions). Default hunt
-      --model <name>     Ollama model (default ${DEFAULT_MODEL})
+      --model <name>     Ollama model that reads the photos (default ${DEFAULT_MODEL})
+      --draw-model <name>  Ollama model that draws each card's picture (default: --model)
       --host <url>       Ollama server (default ${DEFAULT_HOST})
       --paper <size>     a4 or letter (default a4)
       --cols <n>         Width of cards.txt in characters (default 48; 32 for a receipt printer)
       --from <file>      Load cards from a deck.json instead of running the model
       --stdout           Also print the text cards to the terminal (pipe to "lp" to print them)
-      --art <style>      What each card shows: sketch (an ASCII drawing Gemma picks, default),
+      --art <style>      What each card shows: drawing (Gemma draws what it saw, default),
                          photo (the photo in characters), hint (a small, blurry photo) or none
+      --no-anim          Plain progress lines instead of the animated cards
       --no-art           Same as --art none
       --hint-art         Same as --art hint
   -h, --help             Show this help
@@ -73,6 +77,8 @@ async function main(): Promise<void> {
         title: { type: "string", short: "t" },
         mode: { type: "string", short: "m" },
         model: { type: "string" },
+        "draw-model": { type: "string" },
+        "no-anim": { type: "boolean" },
         host: { type: "string" },
         paper: { type: "string" },
         cols: { type: "string" },
@@ -103,6 +109,21 @@ async function main(): Promise<void> {
   fs.mkdirSync(outDir, { recursive: true });
   const deckFile = path.join(outDir, "deck.json");
 
+  let art = (values["no-art"] ? "none" : values["hint-art"] ? "hint" : values.art ?? "drawing") as string;
+  if (art === "full") art = "photo";
+  if (art === "sketch") art = "drawing";
+  if (!["drawing", "photo", "hint", "none"].includes(art)) fail("--art must be drawing, photo, hint or none");
+  const artMode = art as ArtMode;
+
+  // Animated cards in an interactive terminal; plain lines anywhere else.
+  const animate = !!process.stderr.isTTY && !values["no-anim"] && !process.env.CI;
+  const termCols = Math.max(24, Math.min(cols, (process.stderr.columns ?? 80) - 1));
+  const anim = animate ? new CardAnimator(process.stderr, termCols, 14, !process.env.NO_COLOR) : null;
+  process.on("SIGINT", () => {
+    anim?.stop();
+    process.exit(130);
+  });
+
   let deck: Deck;
   if (values.from) {
     const loaded = loadDeck(values.from);
@@ -116,34 +137,69 @@ async function main(): Promise<void> {
     const previous = loadDeck(deckFile);
     const known = new Map((previous?.cards ?? []).map((c) => [c.sha256, c]));
     const model = values.model ?? DEFAULT_MODEL;
+    const drawModel = values["draw-model"] ?? model;
     const cards: Card[] = [];
 
     const toDescribe = photos.length - photos.filter((f) => known.has(crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex"))).length;
     if (toDescribe > 0) {
-      process.stderr.write(`Describing ${toDescribe} photo${toDescribe === 1 ? "" : "s"} with ${model} on this computer. The first one also loads the model, which can take a minute or two.\n`);
+      process.stderr.write(
+        `Describing ${toDescribe} photo${toDescribe === 1 ? "" : "s"} with ${model}${artMode === "drawing" ? `, drawn by ${drawModel}` : ""}, on this computer. The first one also loads the model, which can take a minute or two.\n\n`
+      );
     }
 
     for (const [i, file] of photos.entries()) {
+      const name = path.basename(file);
       const image = fs.readFileSync(file);
       const sha256 = crypto.createHash("sha256").update(image).digest("hex");
-      const tag = `[${i + 1}/${photos.length}] ${path.basename(file)}`;
-      const cached = known.get(sha256);
+      const tag = `[${i + 1}/${photos.length}] ${name}`;
+      const label = `#${String(i + 1).padStart(2, "0")} ${name}`;
       // ASCII art comes from the pixels, not the model, so it's cheap to redo.
-      const art = photoToArt(image) ?? undefined;
-      if (cached && previous?.model === model) {
-        cards.push({ ...cached, file: path.basename(file), art: art ?? cached.art });
-        process.stderr.write(`${tag} -> ${cached.subject} (already described)\n`);
-        continue;
-      }
-      const started = Date.now();
+      const photoArt = photoToArt(image) ?? undefined;
+      const cached = known.get(sha256);
+      let card: Card;
+      const timings: string[] = [];
+
       try {
-        const sighting = await describePhoto(image, { model, host: values.host });
-        cards.push({ ...sighting, file: path.basename(file), sha256, art });
-        const secs = ((Date.now() - started) / 1000).toFixed(1);
-        process.stderr.write(`${tag} -> ${sighting.subject} (${sighting.confidence}, ${secs}s)\n`);
+        if (cached && previous?.model === model) {
+          card = { ...cached, file: name, art: photoArt ?? cached.art };
+        } else {
+          anim?.start(label, "Gemma is reading the photo");
+          const started = Date.now();
+          const sighting = await describePhoto(image, { model, host: values.host });
+          timings.push(`read ${((Date.now() - started) / 1000).toFixed(1)}s`);
+          card = { ...sighting, file: name, sha256, art: photoArt };
+        }
+
+        if (artMode === "drawing" && (!card.drawing?.length || card.drawModel !== drawModel)) {
+          if (anim) {
+            if (!timings.length) anim.start(label, `drawing: ${card.subject}`);
+            else anim.status(`drawing: ${card.subject}`);
+          }
+          const started = Date.now();
+          try {
+            card.drawing = await drawSubject(card.subject, card.description, { model: drawModel, host: values.host });
+            card.drawModel = drawModel;
+          } catch (err) {
+            // A failed drawing shouldn't lose the card: it prints with the clue only.
+            if (!(err instanceof GemmaError) || /isn't installed|Can't reach/.test(err.message)) throw err;
+            card.drawing = [];
+          }
+          timings.push(`drew ${((Date.now() - started) / 1000).toFixed(1)}s`);
+        }
       } catch (err) {
+        anim?.stop();
         if (err instanceof GemmaError) fail(err.message);
         throw err;
+      }
+
+      cards.push(card);
+      const note = timings.length ? `${card.confidence}, ${timings.join(", ")}` : "already described";
+      if (anim) {
+        if (!timings.length) anim.start(label, "from deck.json");
+        await anim.reveal(cardBlock(card, i, mode, termCols, artMode), timings.length ? 900 : 350);
+        process.stderr.write((process.env.NO_COLOR ? "" : "\x1b[90m") + `${tag} -> ${card.subject} (${note})` + (process.env.NO_COLOR ? "" : "\x1b[0m") + "\n\n");
+      } else {
+        process.stderr.write(`${tag} -> ${card.subject} (${note})\n`);
       }
     }
 
@@ -157,14 +213,13 @@ async function main(): Promise<void> {
   }
 
   fs.writeFileSync(deckFile, JSON.stringify(deck, null, 2) + "\n");
-  let art = (values["no-art"] ? "none" : values["hint-art"] ? "hint" : values.art ?? "sketch") as ArtMode | "full";
-  if (art === "full") art = "photo";
-  if (!["sketch", "photo", "hint", "none"].includes(art)) fail("--art must be sketch, photo, hint or none");
-  fs.writeFileSync(path.join(outDir, "index.html"), renderHTML(deck, { paper, art: art as ArtMode }));
-  const text = renderText(deck, cols, art as ArtMode);
+  fs.writeFileSync(path.join(outDir, "index.html"), renderHTML(deck, { paper, art: artMode }));
+  const text = renderText(deck, cols, artMode);
   fs.writeFileSync(path.join(outDir, "cards.txt"), text);
   // Progress goes to stderr, so stdout carries only the cards and can be piped.
-  if (values.stdout) process.stdout.write(text);
+  // When the cards were just animated onto this same terminal, don't print them twice.
+  const alreadyShown = !!anim && !values.from && !!process.stdout.isTTY;
+  if (values.stdout && !alreadyShown) process.stdout.write(text);
 
   process.stderr.write(
     `\nWrote ${deck.cards.length} card${deck.cards.length === 1 ? "" : "s"} to ${outDir}/\n` +

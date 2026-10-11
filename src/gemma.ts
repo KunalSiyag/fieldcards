@@ -1,5 +1,3 @@
-import { SKETCH_IDS, SketchId } from "./sketches";
-
 // Talks to a local Ollama server. Nothing here leaves the machine: photos are
 // read from disk, sent to localhost, and the answer comes back as JSON.
 
@@ -33,8 +31,6 @@ export interface Sighting {
   /** Where you are likely to find it. */
   where: string;
   confidence: "low" | "medium" | "high";
-  /** Which hand-drawn ASCII illustration best shows the subject. */
-  sketch?: SketchId;
 }
 
 export interface GemmaOptions {
@@ -62,8 +58,7 @@ const USER_PROMPT = `Make a scavenger-hunt card from this photo. Reply with JSON
 - clue: a hint to find it outdoors without naming it, max 18 words
 - look_for: 2 or 3 identifying features, max 6 words each
 - where: where it is usually found, max 8 words
-- confidence: low, medium or high
-- sketch: the drawing that best shows the subject, one of ${SKETCH_IDS.join(", ")}`;
+- confidence: low, medium or high`;
 
 // Ollama structured outputs: the model is constrained to this JSON schema.
 const SCHEMA = {
@@ -76,9 +71,8 @@ const SCHEMA = {
     look_for: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 3 },
     where: { type: "string" },
     confidence: { type: "string", enum: ["low", "medium", "high"] },
-    sketch: { type: "string", enum: [...SKETCH_IDS] },
   },
-  required: ["subject", "category", "description", "clue", "look_for", "where", "confidence", "sketch"],
+  required: ["subject", "category", "description", "clue", "look_for", "where", "confidence"],
 };
 
 export class GemmaError extends Error {}
@@ -130,7 +124,6 @@ export function parseSighting(raw: string): Sighting {
     lookFor,
     where: clean(data.where, 12, "Anywhere outdoors"),
     confidence,
-    sketch: SKETCH_IDS.includes(data.sketch as SketchId) ? (data.sketch as SketchId) : undefined,
   };
 }
 
