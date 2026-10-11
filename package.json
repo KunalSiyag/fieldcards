@@ -16,7 +16,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "node --require ts-node/register --test test/*.test.ts",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "prepare": "tsc -p tsconfig.json"
   },
   "keywords": [
     "gemma",

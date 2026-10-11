@@ -22,6 +22,7 @@ Options:
       --paper <size>     a4 or letter (default a4)
       --cols <n>         Width of cards.txt in characters (default 48; 32 for a receipt printer)
       --from <file>      Load cards from a deck.json instead of running the model
+      --stdout           Also print the text cards to the terminal (pipe to "lp" to print them)
       --no-art           Guide mode: don't print the photos as ASCII art
       --hint-art         Hunt mode: add a small, blurry ASCII picture to each card as a hint
   -h, --help             Show this help
@@ -75,6 +76,7 @@ async function main(): Promise<void> {
         cols: { type: "string" },
         from: { type: "string" },
         "no-art": { type: "boolean" },
+        stdout: { type: "boolean" },
         "hint-art": { type: "boolean" },
         help: { type: "boolean", short: "h" },
       },
@@ -155,7 +157,10 @@ async function main(): Promise<void> {
   // Art is on by default in a guide; a hunt only gets blurry hints when asked.
   const art = deck.mode === "guide" ? !values["no-art"] : !!values["hint-art"];
   fs.writeFileSync(path.join(outDir, "index.html"), renderHTML(deck, { paper, art }));
-  fs.writeFileSync(path.join(outDir, "cards.txt"), renderText(deck, cols, art));
+  const text = renderText(deck, cols, art);
+  fs.writeFileSync(path.join(outDir, "cards.txt"), text);
+  // Progress goes to stderr, so stdout carries only the cards and can be piped.
+  if (values.stdout) process.stdout.write(text);
 
   process.stderr.write(
     `\nWrote ${deck.cards.length} cards to ${outDir}/\n` +

@@ -63,16 +63,32 @@ Where: Often found near trees and water sources.
 You need Node.js 18.3 or later and [Ollama](https://ollama.com).
 
 ```bash
-ollama pull gemma3:4b          # about 3.3 GB, once
-npm install
-npm run build
+# 1. Get the model (about 3.3 GB, once)
+ollama pull gemma3:4b
 
-node dist/cli.js ./photos --title "Saturday in the park"
+# 2. Install the fieldcards command
+npm install -g github:KunalSiyag/fieldcards
+
+# 3. Point it at a folder of photos
+fieldcards ./photos --title "Saturday in the park"
 ```
 
-Then open `fieldcards-out/index.html` and print it.
+Then open `fieldcards-out/index.html` in a browser and press Print.
 
-Measured on a laptop with an RTX 3050 (4 GB): the first photo takes about two minutes because it also loads the model onto the GPU, and each photo after that takes 9 to 13 seconds. The model uses about 2.9 GB of GPU memory. Without a GPU it falls back to the CPU and is slower.
+To see the cards in the terminal instead, add `--stdout`. Progress messages go to stderr, so you can pipe the cards straight to a printer:
+
+```bash
+fieldcards ./photos --mode guide --stdout
+fieldcards ./photos --stdout --cols 32 | lp     # 58 mm receipt printer
+```
+
+Working from a clone instead:
+
+```bash
+git clone https://github.com/KunalSiyag/fieldcards && cd fieldcards
+npm install            # also builds
+node dist/cli.js ./photos
+```
 
 ## What you get
 
@@ -103,6 +119,7 @@ fieldcards --from <deck.json> [options]
       --paper <size>   a4 or letter (default a4)
       --cols <n>       Width of cards.txt in characters (default 48)
       --from <file>    Reprint a deck.json without running the model
+      --stdout         Also print the text cards to the terminal
       --no-art         Guide mode: don't print the photos as ASCII art
       --hint-art       Hunt mode: add a blurry ASCII hint picture to each card
 ```
