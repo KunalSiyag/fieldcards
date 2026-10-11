@@ -235,25 +235,58 @@ export function frameArt(lines: string[], label?: string): string[] {
 
 const escapeXML = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+export interface GridLayer {
+  lines: string[];
+  fill: string;
+  weight?: number;
+}
+
 /**
- * Draw ASCII lines as an SVG `width` px wide. Each row is pinned with
- * textLength, so columns line up in whatever monospace font prints it.
+ * Draw layers of monospace text as one SVG `width` px wide. Only runs of
+ * visible characters are drawn, each at its exact column and pinned with
+ * textLength, so the grid lines up in any monospace font and spaces can't be
+ * collapsed or stretched (which is what goes wrong when printing whole rows).
  */
-export function artSVG(lines: string[], width: number, color = "#111111", weight = 700): string {
-  const cols = Math.max(...lines.map((l) => l.length), 1);
+export function gridSVG(layers: GridLayer[], width: number, label?: string): string {
+  const cols = Math.max(1, ...layers.flatMap((l) => l.lines.map((line) => [...line].length)));
+  const rowCount = Math.max(0, ...layers.map((l) => l.lines.length));
   const cw = width / cols;
   const size = cw / 0.6;
   const lh = size * 1.2;
-  const height = Math.ceil(lines.length * lh);
+  const height = Math.ceil(rowCount * lh);
   const r = (n: number) => Math.round(n * 100) / 100;
-  const rows = lines
-    .map(
-      (line, i) =>
-        `<text x="0" y="${r(i * lh + lh * 0.8)}" textLength="${r(line.length * cw)}" lengthAdjust="spacingAndGlyphs">${escapeXML(line)}</text>`
-    )
-    .join("");
+
+  const groups = layers.map((layer) => {
+    const runs: string[] = [];
+    layer.lines.forEach((line, row) => {
+      const chars = [...line];
+      const y = r(row * lh + lh * 0.8);
+      let c = 0;
+      while (c < chars.length) {
+        if (chars[c] === " ") {
+          c++;
+          continue;
+        }
+        let end = c;
+        while (end < chars.length && chars[end] !== " ") end++;
+        const run = chars.slice(c, end).join("");
+        const fit = end - c > 1 ? ` textLength="${r((end - c) * cw)}" lengthAdjust="spacingAndGlyphs"` : "";
+        runs.push(`<text x="${r(c * cw)}" y="${y}"${fit}>${escapeXML(run)}</text>`);
+        c = end;
+      }
+    });
+    const weight = layer.weight ? ` font-weight="${layer.weight}"` : "";
+    return `<g fill="${layer.fill}"${weight}>${runs.join("")}</g>`;
+  });
+
+  const a11y = label ? ` role="img" aria-label="${escapeXML(label).replace(/"/g, "&quot;")}"` : ` aria-hidden="true"`;
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${r(width)}" height="${height}" viewBox="0 0 ${r(width)} ${height}" aria-hidden="true">` +
-    `<g font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="${r(size)}" font-weight="${weight}" fill="${color}" xml:space="preserve" style="white-space:pre">${rows}</g></svg>`
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${r(width)}" height="${height}" viewBox="0 0 ${r(width)} ${height}"${a11y}>` +
+    `<g font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="${r(size)}">${groups.join("")}</g></svg>`
   );
+}
+
+/** Draw ASCII art lines as an SVG `width` px wide. */
+export function artSVG(lines: string[], width: number, color = "#111111", weight = 700): string {
+  return gridSVG([{ lines, fill: color, weight }], width);
 }

@@ -136,10 +136,17 @@ describe("resampling and framing", () => {
     assert.equal(framed[framed.length - 1], "+" + "-".repeat(15) + "+");
   });
 
-  test("artSVG pins every row to the same width", () => {
-    const svg = artSVG(frameArt(fitArt(art, 20, 8)), 200);
-    const lengths = new Set(Array.from(svg.matchAll(/textLength="([\d.]+)"/g), (m) => m[1]));
-    assert.equal(lengths.size, 1);
+  test("artSVG places every run of characters on the column grid", () => {
+    const lines = frameArt(fitArt(art, 20, 8));
+    const svg = artSVG(lines, 200);
+    const cw = 200 / lines[0].length;
+    const runs = Array.from(svg.matchAll(/<text x="([\d.]+)" y="[\d.]+"(?: textLength="([\d.]+)")?[^>]*>([^<]*)<\/text>/g));
+    assert.ok(runs.length > 0);
+    for (const [, x, len, text] of runs) {
+      assert.ok(Math.abs(Number(x) / cw - Math.round(Number(x) / cw)) < 0.01, `x=${x} is on a column`);
+      assert.ok(!text.includes(" "), "spaces are never drawn");
+      if (len) assert.ok(Math.abs(Number(len) - text.length * cw) < 0.02, "run width matches its characters");
+    }
     assert.match(svg, /width="200"/);
   });
 });
@@ -154,10 +161,10 @@ describe("cards with photo art", () => {
   });
   const deck: Deck = { title: "Art test", mode: "guide", model: "gemma3:4b", createdAt: "2026-10-11T08:00:00.000Z", cards: [card("Oak"), card("Elm")] };
 
-  test("photo art is opt-in with art: full", () => {
+  test("photo art is opt-in with art: photo", () => {
     assert.doesNotMatch(renderHTML(deck), /class="art photo"/);
-    assert.match(renderHTML(deck, { art: "full" }), /class="art photo"/);
-    const hunt = renderHTML({ ...deck, mode: "hunt" }, { art: "full" });
+    assert.match(renderHTML(deck, { art: "photo" }), /class="art photo"/);
+    const hunt = renderHTML({ ...deck, mode: "hunt" }, { art: "photo" });
     assert.match(hunt, /class="art photo"/);
     assert.match(hunt, /\[ clue \]/, "the hunt clue sits under the photo");
     assert.doesNotMatch(renderHTML(deck, { art: "none" }), /class="art photo"/);
@@ -165,16 +172,16 @@ describe("cards with photo art", () => {
 
   test("art: hint swaps the photo for a small, blurry hint", () => {
     const html = renderHTML({ ...deck, mode: "hunt" }, { art: "hint" });
-    assert.match(html, /\[ hint \]/);
+    assert.match(html, />hint</);
     assert.doesNotMatch(html, /class="art photo"/);
   });
 
   test("text cards include the art and stay within the column limit", () => {
     for (const cols of [32, 48]) {
-      const text = renderText(deck, cols, "full");
+      const text = renderText(deck, cols, "photo");
       assert.ok(text.includes("+-[ #01 tree ]"), "framed photo art");
       for (const line of text.split("\n")) assert.ok([...line].length <= cols, `${cols}: ${line}`);
-      const hunt = renderText({ ...deck, mode: "hunt" }, cols, "full");
+      const hunt = renderText({ ...deck, mode: "hunt" }, cols, "photo");
       assert.ok(hunt.includes("> Tall and quiet."), "hunt text shows the clue under the photo");
       const hints = renderText({ ...deck, mode: "hunt" }, cols, "hint");
       assert.ok(hints.includes("[ hint ]"));

@@ -2,7 +2,9 @@
 
 Turn your outdoor photos into a printable scavenger hunt, with an open-weight model running on your own computer.
 
-Each photo goes to **Gemma 3**, running locally through **Ollama**. Gemma works out what the photo shows and writes a clue for finding it that doesn't name it. **[altsvg](https://www.npmjs.com/package/altsvg)** then replaces every photo with a printed ASCII card holding that clue, the way altsvg turns alt text into a placeholder. You print the sheet, leave your phone at home, and go find the real things.
+Each photo goes to **Gemma 3**, running locally through **Ollama**. Gemma works out what the photo shows and writes a clue for finding it that doesn't name it. Gemma also picks an ASCII drawing for each photo (a bird, a leaf, a mushroom, a tree...), and fieldcards prints it in a `+-[ #01 bird ]--+` frame with the clue underneath, in the style of the [altsvg](https://www.npmjs.com/package/altsvg) placeholders.
+
+![A printed fieldcards sheet: framed ASCII drawings of a house, a bird, a flower and a mushroom, each with a clue](docs/sheet-sketch.png) You print the sheet, leave your phone at home, and go find the real things.
 
 ```
 +-[ #05 other ]----------------+
@@ -76,7 +78,7 @@ fieldcards ./photos --title "Saturday in the park"
 
 Then open `fieldcards-out/index.html` in a browser and press Print.
 
-![fieldcards running in a terminal on one photo, printing a clue card](docs/terminal.png)
+![fieldcards running in a terminal on one photo, printing a card with an ASCII drawing and a clue](docs/terminal-sketch.png)
 
 To see the cards in the terminal instead, add `--stdout`. Progress messages go to stderr, so you can pipe the cards straight to a printer:
 
@@ -103,14 +105,15 @@ node dist/cli.js ./photos
 
 Two modes:
 
-- `--mode hunt` (the default): a clue card and what to look for. The names are on a separate answer page.
-- `--mode guide`: the name and a description, like a pocket field guide for a walk you've already done.
+- `--mode hunt` (the default): a drawing, a clue and what to look for. The names are on a separate answer page.
+- `--mode guide`: a drawing, the name and a description, like a pocket field guide for a walk you've already done.
 
-`--art` optionally prints the photos too:
+`--art` sets what each card shows above the text:
 
-- `none` (the default) prints text cards only.
-- `full` draws each photo in characters, up to 70 columns wide.
-- `hint` draws a small, blurry version beside the clue, for a harder hunt.
+- `sketch` (the default): a hand-drawn ASCII illustration that Gemma picks from 14 (bird, tree, leaf, flower, mushroom, water, mountain, rock, insect, animal, sky, building, pine cone, and a magnifying glass for anything else).
+- `photo`: the photo itself converted to characters. Works best on simple, high-contrast subjects.
+- `hint`: a small, blurry version of the photo beside the clue, for a harder hunt.
+- `none`: text cards only.
 
 Photo art works with JPEG and PNG, and follows the camera's rotation tag, so portrait phone photos come out the right way up.
 
@@ -129,7 +132,7 @@ fieldcards --from <deck.json> [options]
       --cols <n>       Width of cards.txt in characters (default 48)
       --from <file>    Reprint a deck.json without running the model
       --stdout         Also print the text cards to the terminal
-      --art <style>    none (default), full (photo in characters) or hint (small and blurry)
+      --art <style>    sketch (default), photo, hint or none
 ```
 
 Photos that have already been described are skipped on the next run. They are matched by content hash, so you can add photos to the folder and run it again.
@@ -138,7 +141,7 @@ Photos that have already been described are skipped on the next run. They are ma
 
 1. **Describe.** Each photo is sent to `POST /api/chat` on the local Ollama server, with a JSON schema in `format`. The model must return `subject`, `category`, `description`, `clue`, `look_for`, `where` and `confidence`.
 2. **Check.** The answer is validated and trimmed. If a clue contains its own answer, the answer is blanked out, and low-confidence answers are marked "best guess" on the card.
-3. **Draw.** altsvg's ASCII style replaces each photo with a monospace card the same size as the picture, in SVG for the printed sheet and as plain text for `cards.txt`.
+3. **Draw.** Gemma's answer includes a `sketch`: which of 14 hand-drawn ASCII illustrations fits the photo. If its choice isn't backed by its own words or category while the subject clearly names something else (it once drew a pine cone for "A fallen log"), the subject wins. The card is the drawing in a `+-[ #01 bird ]--+` frame with the clue underneath, drawn as SVG for the printed page and as plain text for the terminal. Text is wrapped and measured with altsvg.
 4. **Print the photo.** The photo is decoded locally, rotated by its EXIF tag, and averaged into character cells, then mapped onto ` .:-=+*#%@` so dark areas come out as dense ink. Tall photos are cropped to a square around the middle; printed narrow, each character would average a strip wider than a tree trunk. Mostly dark photos, like a forest in shade, would print as solid ink, so their midtones are lifted and mixed with histogram equalisation to bring out shapes. Light photos are left alone, which keeps plain backgrounds clean. The art is stored in `deck.json` at 96 columns and resized for each layout.
 
 ## What a 4B model gets right and wrong
