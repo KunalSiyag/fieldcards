@@ -137,7 +137,7 @@ Photos that have already been described are skipped on the next run. They are ma
 1. **Describe.** Each photo is sent to `POST /api/chat` on the local Ollama server, with a JSON schema in `format`. The model must return `subject`, `category`, `description`, `clue`, `look_for`, `where` and `confidence`.
 2. **Check.** The answer is validated and trimmed. If a clue contains its own answer, the answer is blanked out, and low-confidence answers are marked "best guess" on the card.
 3. **Draw.** altsvg's ASCII style replaces each photo with a monospace card the same size as the picture, in SVG for the printed sheet and as plain text for `cards.txt`.
-4. **Print the photo.** The photo is decoded locally, rotated by its EXIF tag, averaged into character cells and contrast-stretched, then mapped onto ` .:-=+*#%@`, so dark areas come out as dense ink. The art is stored in `deck.json` at 96 columns and resized for each layout.
+4. **Print the photo.** The photo is decoded locally, rotated by its EXIF tag, and averaged into character cells, then mapped onto ` .:-=+*#%@` so dark areas come out as dense ink. Tall photos are cropped to a square around the middle; printed narrow, each character would average a strip wider than a tree trunk. Mostly dark photos, like a forest in shade, would print as solid ink, so their midtones are lifted and mixed with histogram equalisation to bring out shapes. Light photos are left alone, which keeps plain backgrounds clean. The art is stored in `deck.json` at 96 columns and resized for each layout.
 
 ## What a 4B model gets right and wrong
 

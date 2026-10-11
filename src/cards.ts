@@ -126,8 +126,12 @@ export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   const art: ArtMode = options.art ?? "full";
   const intro =
     deck.mode === "hunt"
-      ? `Find all ${deck.cards.length}. Each card hides a photo behind a clue. Tick it off when you spot the real thing.`
-      : `${deck.cards.length} things to look for. Tick each one off when you spot it.`;
+      ? deck.cards.length === 1
+        ? "Find the thing on this card. Tick it off when you spot the real thing."
+        : `Find all ${deck.cards.length}. Each card has a picture and a clue. Tick each one off when you spot the real thing.`
+      : deck.cards.length === 1
+        ? "One thing to look for. Tick it off when you spot it."
+        : `${deck.cards.length} things to look for. Tick each one off when you spot it.`;
   const date = new Date(deck.createdAt).toLocaleDateString("en", { day: "numeric", month: "long", year: "numeric" });
 
   return `<!DOCTYPE html>

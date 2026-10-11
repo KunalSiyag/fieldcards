@@ -149,26 +149,54 @@ function rowsFor(cols: number, width: number, height: number): number {
 }
 
 /**
- * Render a photo as ASCII art `cols` characters wide. Contrast is stretched
- * between the 2nd and 98th percentile so dull photos still read clearly.
+ * Render a photo as ASCII art `cols` characters wide.
+ *
+ * - Tall photos are cropped to a square around the middle. Printed narrow,
+ *   each character would average a strip wider than a tree trunk.
+ * - Contrast is stretched between the 2nd and 98th percentile.
+ * - Mostly dark photos (median below 0.45) would print as solid ink, so their
+ *   midtones are lifted with a gamma that puts the median at 0.5, mixed half
+ *   and half with histogram equalisation to bring out shapes. Light photos
+ *   are left alone, which keeps plain backgrounds clean.
+ *
  * Returns null when the format isn't JPEG or PNG.
  */
 export function photoToArt(buf: Buffer, cols = STORED_COLS): string[] | null {
   const img = decodeGray(buf);
   if (!img || img.width < 2 || img.height < 2) return null;
-  const rows = rowsFor(cols, img.width, img.height);
-  const cells = areaAverage(img.lum, img.width, img.height, cols, rows);
+
+  const height = Math.min(img.height, img.width);
+  const top = Math.floor((img.height - height) / 2);
+  const lum = img.lum.subarray(top * img.width, (top + height) * img.width);
+
+  const rows = rowsFor(cols, img.width, height);
+  const cells = areaAverage(lum, img.width, height, cols, rows);
 
   const sorted = Array.from(cells).sort((a, b) => a - b);
   const lo = sorted[Math.floor(sorted.length * 0.02)];
   const hi = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.98))];
   const span = hi - lo;
+  const linear = (v: number) => (span > 0.05 ? Math.min(1, Math.max(0, (v - lo) / span)) : v);
+
+  // Fraction of cells darker than v: the histogram-equalised brightness.
+  const rank = (v: number) => {
+    let a = 0;
+    let b = sorted.length;
+    while (a < b) {
+      const m = (a + b) >> 1;
+      if (sorted[m] < v) a = m + 1;
+      else b = m;
+    }
+    return a / Math.max(1, sorted.length - 1);
+  };
+
+  const median = linear(sorted[Math.floor(sorted.length / 2)]);
+  const dark = median < 0.45 && span > 0.05;
+  const gamma = dark ? Math.min(1, Math.max(0.35, Math.log(0.5) / Math.log(Math.max(median, 0.01)))) : 1;
+  const tone = dark ? (v: number) => 0.5 * rank(v) + 0.5 * Math.pow(linear(v), gamma) : linear;
 
   const darkness = new Float32Array(cells.length);
-  for (let i = 0; i < cells.length; i++) {
-    const v = span > 0.05 ? (cells[i] - lo) / span : cells[i];
-    darkness[i] = 1 - v;
-  }
+  for (let i = 0; i < cells.length; i++) darkness[i] = 1 - tone(cells[i]);
   return toLines(darkness, cols, rows);
 }
 

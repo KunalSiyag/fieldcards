@@ -55,6 +55,27 @@ describe("photoToArt", () => {
     assert.ok(density(art[2][0]) < density(art[2][23]));
   });
 
+  test("crops tall photos to a square around the middle", () => {
+    const art = photoToArt(pngOf(100, 300), 40)!;
+    assert.equal(art[0].length, 40);
+    assert.equal(art.length, 20, "a square photo is half as many rows as columns");
+  });
+
+  test("lifts mostly dark photos so they don't print as solid ink", () => {
+    // Dark grey everywhere, with faint darker stripes and one bright spot.
+    const w = 120, h = 60;
+    const png = new PNG({ width: w, height: h });
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const v = x > 100 && y < 10 ? 240 : x % 12 < 6 ? 40 : 55;
+      png.data.set([v, v, v, 255], (y * w + x) * 4);
+    }
+    const art = photoToArt(PNG.sync.write(png), 40)!;
+    const chars = new Set(art.join(""));
+    assert.ok(chars.size >= 4, `dark photo uses ${chars.size} characters: ${[...chars].join("")}`);
+    const dense = art.join("").split("").filter((c) => c === "@" || c === "%").length / (40 * art.length);
+    assert.ok(dense < 0.6, `only ${Math.round(dense * 100)}% of cells are solid ink`);
+  });
+
   test("returns null for formats it can't decode", () => {
     assert.equal(photoToArt(Buffer.from("RIFF....WEBPVP8 ")), null);
     assert.equal(photoToArt(Buffer.alloc(0)), null);
