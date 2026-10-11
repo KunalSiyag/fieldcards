@@ -25,7 +25,7 @@ Where: Typically found in damp,
 
 That card came from a real `gemma3:4b` run on a photo of a mossy log across a forest waterfall.
 
-With `--art full`, cards also print the photo itself in characters. It works best on simple subjects against a plain background, like this crow from the same run:
+With `--art photo`, cards print the photo itself in characters instead. It works best on simple subjects against a plain background, like this crow from the same run:
 
 ```
 +-[ #01 bird ]---------------------------------+
