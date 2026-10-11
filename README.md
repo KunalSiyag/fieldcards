@@ -76,6 +76,8 @@ fieldcards ./photos --title "Saturday in the park"
 
 Then open `fieldcards-out/index.html` in a browser and press Print.
 
+![fieldcards running in a terminal on one photo, printing a clue card](docs/terminal.png)
+
 To see the cards in the terminal instead, add `--stdout`. Progress messages go to stderr, so you can pipe the cards straight to a printer:
 
 ```bash

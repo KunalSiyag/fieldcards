@@ -226,8 +226,13 @@ export function renderText(deck: Deck, cols = 48, art: ArtMode = "none"): string
 
   deck.cards.forEach((card, i) => {
     const label = `${num(i)} ${card.category}`;
-    const clueFrame = () =>
-      generateAltASCII(px, 7 * 14.4, cardText(card, deck.mode), { style: "ascii", label, showSize: false, fontSize: 12 });
+    // Fix the font size so the frame is exactly `width` columns, and grow the
+    // frame downwards to fit the text instead of shrinking it.
+    const clueFrame = () => {
+      const text = cardText(card, deck.mode);
+      const rows = Math.max(7, wrap(text, width - 6).length + 4);
+      return generateAltASCII(px, rows * 14.4, text, { style: "ascii", label, showSize: false, fontSize: 12, minFontSize: 12 });
+    };
 
     if (art === "full" && card.art?.length) {
       out.push(...frameArt(fitArt(card.art, width - 2, 16), label));

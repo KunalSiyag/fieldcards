@@ -131,4 +131,11 @@ describe("renderText", () => {
       assert.ok(text.includes("ANSWERS"));
     }
   });
+
+  test("guide cards with long descriptions stay within the column limit", () => {
+    const long = { ...deck, mode: "guide" as const, cards: deck.cards.map((c) => ({ ...c, description: "A long description of a bar top with many reflective surfaces, including a large circular table under a chandelier." })) };
+    for (const cols of [32, 40, 48]) {
+      for (const line of renderText(long, cols).split("\n")) assert.ok([...line].length <= cols, `${cols}: ${JSON.stringify(line)}`);
+    }
+  });
 });

@@ -166,7 +166,7 @@ async function main(): Promise<void> {
   if (values.stdout) process.stdout.write(text);
 
   process.stderr.write(
-    `\nWrote ${deck.cards.length} cards to ${outDir}/\n` +
+    `\nWrote ${deck.cards.length} card${deck.cards.length === 1 ? "" : "s"} to ${outDir}/\n` +
       `  index.html  open it and print\n` +
       `  cards.txt   plain text, ${cols} columns\n` +
       `  deck.json   fix anything Gemma got wrong, then: fieldcards --from ${deckFile}\n`
