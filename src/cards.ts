@@ -9,7 +9,7 @@ export interface Card extends Sighting {
   file: string;
   /** SHA-256 of the photo, so re-runs only describe new photos. */
   sha256: string;
-  /** The photo as ASCII art, 64 columns wide. Missing for formats we can't decode. */
+  /** The photo as ASCII art, 96 columns wide. Missing for formats we can't decode. */
   art?: string[];
 }
 
@@ -21,20 +21,21 @@ export interface Deck {
   cards: Card[];
 }
 
+/**
+ * How to print the photos: "full" draws each photo in characters (default),
+ * "hint" draws a small, blurry version for a harder hunt, "none" leaves them out.
+ */
+export type ArtMode = "full" | "hint" | "none";
+
 export interface RenderOptions {
   paper?: "a4" | "letter";
-  /**
-   * Print the photos as ASCII art. In a guide each card shows the full picture
-   * (default on). In a hunt each card gets a small, blurry hint (default off),
-   * since a sharp picture would give the answer away.
-   */
-  art?: boolean;
+  art?: ArtMode;
 }
 
-/** Whether to draw art for this deck, given the user's choice. */
-export function wantsArt(mode: Mode, art: boolean | undefined): boolean {
-  return art ?? mode === "guide";
-}
+// Photo art on a printed card: up to 70 columns plus the frame, 22 rows tall.
+const ART_COLS = 70;
+const ART_ROWS = 22;
+const CARD_PX = 330;
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -47,10 +48,10 @@ export function cardText(card: Card, mode: Mode): string {
 }
 
 /** The ASCII "photo" for one card: the picture is replaced by words you take outside. */
-export function cardSVG(card: Card, index: number, mode: Mode, width = 330, height = 118): string {
+export function cardSVG(card: Card, index: number, mode: Mode, width = 330, height = 118, label?: string): string {
   return generateAltSVG(width, height, cardText(card, mode), {
     style: "ascii",
-    label: `${num(index)} ${card.category}`,
+    label: label ?? `${num(index)} ${card.category}`,
     showSize: false,
     background: "none",
     textColor: "#111111",
@@ -69,21 +70,25 @@ function details(card: Card): string {
       </dl>`;
 }
 
-function cardHTML(card: Card, index: number, mode: Mode, art: boolean): string {
+function cardHTML(card: Card, index: number, mode: Mode, art: ArtMode): string {
   const heading = mode === "hunt" ? `Find ${num(index)}` : esc(card.subject);
   const unsure = card.confidence === "low" ? `<span class="unsure">best guess</span>` : "";
+  const label = `${num(index)} ${card.category}`;
   let body: string;
 
-  if (art && card.art?.length && mode === "guide") {
-    // The photo, printed in characters, then what it is.
-    const picture = frameArt(fitArt(card.art, 46, 13), `${num(index)} ${card.category}`);
-    // Size by column count so portrait photos print narrower, not with bigger characters.
-    const share = Math.round((picture[0].length / 48) * 1000) / 10;
-    body = `
-      <div class="art photo" style="width:${share}%">${artSVG(picture, picture[0].length * 6.875)}</div>
-      <p class="desc">${esc(card.description)}</p>${details(card)}`;
-  } else if (art && card.art?.length) {
-    // Hunt: the clue, plus a coarse picture that hints without telling.
+  if (art === "full" && card.art?.length) {
+    // The photo printed in characters. Sized by column count, so portrait
+    // photos print narrower rather than with bigger characters.
+    const picture = frameArt(fitArt(card.art, ART_COLS, ART_ROWS), label);
+    const cols = picture[0].length;
+    const share = Math.round((cols / (ART_COLS + 2)) * 1000) / 10;
+    const photo = `<div class="art photo" style="width:${share}%">${artSVG(picture, (cols * CARD_PX) / (ART_COLS + 2))}</div>`;
+    body =
+      mode === "guide"
+        ? `${photo}<p class="desc">${esc(card.description)}</p>${details(card)}`
+        : `${photo}<div class="art">${cardSVG(card, index, mode, CARD_PX, 96, "clue")}</div>${details(card)}`;
+  } else if (art === "hint" && card.art?.length) {
+    // A coarse picture beside the clue: enough to hint, too blurry to tell.
     const hint = frameArt(fitArt(card.art, 16, 5), "hint");
     const hintShare = Math.round((hint[0].length / 18) * 1000) / 10;
     body = `
@@ -118,7 +123,7 @@ function answerKey(deck: Deck): string {
 /** A print-first HTML page: six cards to a sheet, and an answer key for hunts. */
 export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   const paper = options.paper === "letter" ? "letter" : "A4";
-  const art = wantsArt(deck.mode, options.art);
+  const art: ArtMode = options.art ?? "full";
   const intro =
     deck.mode === "hunt"
       ? `Find all ${deck.cards.length}. Each card hides a photo behind a clue. Tick it off when you spot the real thing.`
@@ -187,7 +192,7 @@ export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   <div class="grid">${deck.cards.map((c, i) => cardHTML(c, i, deck.mode, art)).join("")}
   </div>
   ${deck.mode === "hunt" ? answerKey(deck) : ""}
-  <p class="note">Made offline: ${esc(deck.model)} described the photos on this computer, and altsvg drew the cards${art ? ", with the photos printed in characters" : ""}. Look, don't pick: never eat or touch anything because a card says what it is.</p>
+  <p class="note">Made offline: ${esc(deck.model)} described the photos on this computer, and altsvg drew the cards${art === "none" ? "" : ", with the photos printed in characters"}. Look, don't pick: never eat or touch anything because a card says what it is.</p>
 </main>
 </body>
 </html>
@@ -208,8 +213,7 @@ function hanging(prefix: string, text: string, cols: number): string[] {
  * Plain-text cards, `cols` characters wide. Prints on any printer, including
  * a 58 mm receipt printer at 32 columns.
  */
-export function renderText(deck: Deck, cols = 48, artOption?: boolean): string {
-  const art = wantsArt(deck.mode, artOption);
+export function renderText(deck: Deck, cols = 48, art: ArtMode = "full"): string {
   const width = Math.max(24, cols);
   // generateAltASCII sizes the grid from pixels: 0.6em per column, 1.2em per row at 12px.
   const px = width * 0.6 * 12;
@@ -217,20 +221,17 @@ export function renderText(deck: Deck, cols = 48, artOption?: boolean): string {
   const out: string[] = [rule, ...wrap(deck.title.toUpperCase(), width), rule, ""];
 
   deck.cards.forEach((card, i) => {
-    const hasArt = art && !!card.art?.length;
-    if (hasArt && deck.mode === "guide") {
-      out.push(...frameArt(fitArt(card.art!, width - 2, 13), `${num(i)} ${card.category}`));
-      out.push(...wrap(card.subject.toUpperCase(), width), ...wrap(card.description, width));
+    const label = `${num(i)} ${card.category}`;
+    const clueFrame = () =>
+      generateAltASCII(px, 7 * 14.4, cardText(card, deck.mode), { style: "ascii", label, showSize: false, fontSize: 12 });
+
+    if (art === "full" && card.art?.length) {
+      out.push(...frameArt(fitArt(card.art, width - 2, 16), label));
+      if (deck.mode === "guide") out.push(...wrap(card.subject.toUpperCase(), width), ...wrap(card.description, width));
+      else out.push(...wrap(`> ${card.clue}`, width));
     } else {
-      if (hasArt) out.push(...frameArt(fitArt(card.art!, Math.min(16, width - 2), 6), "hint"));
-      out.push(
-        generateAltASCII(px, 7 * 14.4, cardText(card, deck.mode), {
-          style: "ascii",
-          label: `${num(i)} ${card.category}`,
-          showSize: false,
-          fontSize: 12,
-        })
-      );
+      if (art === "hint" && card.art?.length) out.push(...frameArt(fitArt(card.art, Math.min(16, width - 2), 6), "hint"));
+      out.push(clueFrame());
       if (deck.mode === "guide") out.push(...wrap(card.subject.toUpperCase(), width));
     }
     for (const feature of card.lookFor) out.push(...hanging("- ", feature, width));

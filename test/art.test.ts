@@ -133,15 +133,18 @@ describe("cards with photo art", () => {
   });
   const deck: Deck = { title: "Art test", mode: "guide", model: "gemma3:4b", createdAt: "2026-10-11T08:00:00.000Z", cards: [card("Oak"), card("Elm")] };
 
-  test("guide mode prints the photo by default and can turn it off", () => {
+  test("every mode prints the photo by default, and art: none turns it off", () => {
     assert.match(renderHTML(deck), /class="art photo"/);
-    assert.doesNotMatch(renderHTML(deck, { art: false }), /class="art photo"/);
+    const hunt = renderHTML({ ...deck, mode: "hunt" });
+    assert.match(hunt, /class="art photo"/);
+    assert.match(hunt, /\[ clue \]/, "the hunt clue sits under the photo");
+    assert.doesNotMatch(renderHTML(deck, { art: "none" }), /class="art photo"/);
   });
 
-  test("hunt mode adds blurry hints only when asked", () => {
-    const hunt = { ...deck, mode: "hunt" as const };
-    assert.doesNotMatch(renderHTML(hunt), /\[ hint \]/);
-    assert.match(renderHTML(hunt, { art: true }), /\[ hint \]/);
+  test("art: hint swaps the photo for a small, blurry hint", () => {
+    const html = renderHTML({ ...deck, mode: "hunt" }, { art: "hint" });
+    assert.match(html, /\[ hint \]/);
+    assert.doesNotMatch(html, /class="art photo"/);
   });
 
   test("text cards include the art and stay within the column limit", () => {
@@ -149,7 +152,9 @@ describe("cards with photo art", () => {
       const text = renderText(deck, cols);
       assert.ok(text.includes("+-[ #01 tree ]"), "framed photo art");
       for (const line of text.split("\n")) assert.ok([...line].length <= cols, `${cols}: ${line}`);
-      const hints = renderText({ ...deck, mode: "hunt" }, cols, true);
+      const hunt = renderText({ ...deck, mode: "hunt" }, cols);
+      assert.ok(hunt.includes("> Tall and quiet."), "hunt text shows the clue under the photo");
+      const hints = renderText({ ...deck, mode: "hunt" }, cols, "hint");
       assert.ok(hints.includes("[ hint ]"));
       for (const line of hints.split("\n")) assert.ok([...line].length <= cols, `${cols}: ${line}`);
     }
@@ -158,6 +163,7 @@ describe("cards with photo art", () => {
   test("cards without art fall back to the text frame", () => {
     const noArt = { ...deck, cards: deck.cards.map(({ art: _art, ...c }) => c) };
     const html = renderHTML(noArt);
+    assert.doesNotMatch(renderHTML({ ...noArt, mode: "hunt" }), /class="art photo"/);
     assert.doesNotMatch(html, /class="art photo"/);
     assert.match(html, /A Oak\./);
   });

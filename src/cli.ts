@@ -4,7 +4,7 @@ import path from "path";
 import crypto from "crypto";
 import { parseArgs } from "util";
 import { describePhoto, GemmaError, DEFAULT_HOST, DEFAULT_MODEL } from "./gemma";
-import { renderHTML, renderText, Card, Deck, Mode } from "./cards";
+import { renderHTML, renderText, ArtMode, Card, Deck, Mode } from "./cards";
 import { photoToArt } from "./art";
 
 const USAGE = `fieldcards: turn your outdoor photos into printable scavenger-hunt cards, offline.
@@ -23,8 +23,10 @@ Options:
       --cols <n>         Width of cards.txt in characters (default 48; 32 for a receipt printer)
       --from <file>      Load cards from a deck.json instead of running the model
       --stdout           Also print the text cards to the terminal (pipe to "lp" to print them)
-      --no-art           Guide mode: don't print the photos as ASCII art
-      --hint-art         Hunt mode: add a small, blurry ASCII picture to each card as a hint
+      --art <style>      How to print the photos: full (in characters, default), hint (small
+                         and blurry, for a harder hunt) or none
+      --no-art           Same as --art none
+      --hint-art         Same as --art hint
   -h, --help             Show this help
 
 Writes index.html (print it), cards.txt (plain text) and deck.json (edit it, then use --from).`;
@@ -75,6 +77,7 @@ async function main(): Promise<void> {
         paper: { type: "string" },
         cols: { type: "string" },
         from: { type: "string" },
+        art: { type: "string" },
         "no-art": { type: "boolean" },
         stdout: { type: "boolean" },
         "hint-art": { type: "boolean" },
@@ -128,7 +131,7 @@ async function main(): Promise<void> {
       // ASCII art comes from the pixels, not the model, so it's cheap to redo.
       const art = photoToArt(image) ?? undefined;
       if (cached && previous?.model === model) {
-        cards.push({ ...cached, file: path.basename(file), art: cached.art ?? art });
+        cards.push({ ...cached, file: path.basename(file), art: art ?? cached.art });
         process.stderr.write(`${tag} -> ${cached.subject} (already described)\n`);
         continue;
       }
@@ -154,8 +157,8 @@ async function main(): Promise<void> {
   }
 
   fs.writeFileSync(deckFile, JSON.stringify(deck, null, 2) + "\n");
-  // Art is on by default in a guide; a hunt only gets blurry hints when asked.
-  const art = deck.mode === "guide" ? !values["no-art"] : !!values["hint-art"];
+  const art = (values["no-art"] ? "none" : values["hint-art"] ? "hint" : values.art ?? "full") as ArtMode;
+  if (!["full", "hint", "none"].includes(art)) fail("--art must be full, hint or none");
   fs.writeFileSync(path.join(outDir, "index.html"), renderHTML(deck, { paper, art }));
   const text = renderText(deck, cols, art);
   fs.writeFileSync(path.join(outDir, "cards.txt"), text);

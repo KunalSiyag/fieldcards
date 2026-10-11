@@ -2,7 +2,7 @@
 
 Turn your outdoor photos into a printable scavenger hunt, with an open-weight model running on your own computer.
 
-Each photo goes to **Gemma 3**, running locally through **Ollama**. Gemma works out what the photo shows and writes a clue for finding it that doesn't name it. **[altsvg](https://www.npmjs.com/package/altsvg)** then replaces every photo with an ASCII card holding that clue, and the photo itself can be printed in characters too. You print the sheet, leave your phone at home, and go find the real things.
+Each photo goes to **Gemma 3**, running locally through **Ollama**. Gemma works out what the photo shows and writes a clue for finding it that doesn't name it. The photo is printed in ASCII characters, straight from its pixels, and **[altsvg](https://www.npmjs.com/package/altsvg)** draws the clue beneath it as an ASCII card. You print the sheet, leave your phone at home, and go find the real things.
 
 ```
 +-[ #05 other ]----------------+
@@ -23,24 +23,25 @@ Where: Typically found in damp,
 
 That card came from a real `gemma3:4b` run on a photo of a mossy log across a forest waterfall.
 
-In guide mode the photo itself is printed in characters, straight from its pixels:
+Every card also prints the photo itself in characters. Here's the crow photo from the same run, in guide mode:
 
 ```
-+-[ #01 bird ]----------------------------+
-|..          .......:::::--------- .---:..|
-|:::.........:..::::::-+===--:::::. ::::::|
-|:::::::::::::::::::-*%##@%*+-::::=..::...|
-|......:::::::::::-*%%%**#*:::::::===-. ..|
-|.::::::::::::::+*####*%##=:::::::::--:-=-|
-| .::::::::::.-*@%%#*=+##%+-:..:---::::--+|
-|:...:::::::-+%@@%%###**#*-------:::::::::|
-|:--::.:::=%%@%@@%@@%###*---::::::::::::::|
-|::::-::-=#%@@@@@@@%%#*=-::::::::::::::::.|
-|.::::-=#%%#%@%*#%#+-:::::::::::::::::::::|
-|....=#%+-:-%#*%%%#-::::::::..............|
-|...:=-:::-##-::-*+=--:::::::::...........|
-|::::::::-##-:::::-=++-:.:::::::::::::....|
-+-----------------------------------------+
++-[ #01 bird ]---------------------------------+
+|..     .     .....:..:::::----------- .:---:::|
+|::::.........::..:::::::-====---::::-: :::::::|
+|::::::::::::::::::::::-##%%%##*=:::::=. ::::::|
+|....::::::::::::::::=*%@#**##-:::::::+=-:.  ..|
+|:::::::::::::::::-=*#%####**=::::::::::=+-.:::|
+|.:::::::::::::.:+%%%#*++*#%%+:::..:::::.::-+*+|
+|...::::::::::.=#@@%%#**+**##+=-::-----::::::::|
+|-::..::::::-+%@@@%%%%%#*+#%=---:::::::::::::::|
+|:::--:.:::=@@%%@@@%@%%###*=---::::::::::::::::|
+|::::::--=+%%@@@%%%@@%#*+--::::::::::::::::::::|
+|.:::::-*%#**#%%#*###+-::::::::::::::::::::::::|
+|....=#%*=::-#%+*%%%#-::::::::::.............::|
+|.:::---:::-*%=:::-+*+=--:::::::::::::::::::::.|
+|:::::::::-#%=::::::-==++:::::::::::::::::::...|
++----------------------------------------------+
 A SLEEK, DARK BIRD
 A large, glossy black bird perches on a
 weathered branch.
@@ -100,8 +101,14 @@ node dist/cli.js ./photos
 
 Two modes:
 
-- `--mode hunt` (the default) puts a clue on each card and the answers on a separate page. Add `--hint-art` for a small, blurry ASCII version of the photo next to each clue: enough to hint, too coarse to give it away.
-- `--mode guide` names each thing and describes it, like a pocket field guide for a walk you've already done. Each card shows the photo printed in characters. Turn that off with `--no-art`.
+- `--mode hunt` (the default): the photo in characters, a clue, and what to look for. The names are on a separate answer page.
+- `--mode guide`: the photo in characters, its name and a description, like a pocket field guide for a walk you've already done.
+
+`--art` sets how the photos print:
+
+- `full` (the default) draws each photo in characters, up to 70 columns wide.
+- `hint` draws a small, blurry version beside the clue, for a harder hunt.
+- `none` leaves the photos out and prints text cards only.
 
 Photo art works with JPEG and PNG, and follows the camera's rotation tag, so portrait phone photos come out the right way up.
 
@@ -120,8 +127,7 @@ fieldcards --from <deck.json> [options]
       --cols <n>       Width of cards.txt in characters (default 48)
       --from <file>    Reprint a deck.json without running the model
       --stdout         Also print the text cards to the terminal
-      --no-art         Guide mode: don't print the photos as ASCII art
-      --hint-art       Hunt mode: add a blurry ASCII hint picture to each card
+      --art <style>    full (photo in characters, default), hint (small and blurry) or none
 ```
 
 Photos that have already been described are skipped on the next run. They are matched by content hash, so you can add photos to the folder and run it again.
@@ -131,7 +137,7 @@ Photos that have already been described are skipped on the next run. They are ma
 1. **Describe.** Each photo is sent to `POST /api/chat` on the local Ollama server, with a JSON schema in `format`. The model must return `subject`, `category`, `description`, `clue`, `look_for`, `where` and `confidence`.
 2. **Check.** The answer is validated and trimmed. If a clue contains its own answer, the answer is blanked out, and low-confidence answers are marked "best guess" on the card.
 3. **Draw.** altsvg's ASCII style replaces each photo with a monospace card the same size as the picture, in SVG for the printed sheet and as plain text for `cards.txt`.
-4. **Print the photo.** The photo is decoded locally, rotated by its EXIF tag, averaged into character cells and contrast-stretched, then mapped onto ` .:-=+*#%@`, so dark areas come out as dense ink. The art is stored in `deck.json` at 64 columns and resized for each layout.
+4. **Print the photo.** The photo is decoded locally, rotated by its EXIF tag, averaged into character cells and contrast-stretched, then mapped onto ` .:-=+*#%@`, so dark areas come out as dense ink. The art is stored in `deck.json` at 96 columns and resized for each layout.
 
 ## What a 4B model gets right and wrong
 

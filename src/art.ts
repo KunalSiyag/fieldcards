@@ -11,8 +11,8 @@ export const RAMP = " .:-=+*#%@";
 /** A monospace cell is about half as wide as it is tall (0.6em by 1.2em). */
 const CELL_ASPECT = 0.5;
 
-/** Columns stored in deck.json; every other size is resampled from this. */
-export const STORED_COLS = 64;
+/** Columns stored in deck.json; every other size is resampled down from this. */
+export const STORED_COLS = 96;
 
 interface Gray {
   width: number;
@@ -211,7 +211,7 @@ const escapeXML = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").
  * Draw ASCII lines as an SVG `width` px wide. Each row is pinned with
  * textLength, so columns line up in whatever monospace font prints it.
  */
-export function artSVG(lines: string[], width: number, color = "#111111"): string {
+export function artSVG(lines: string[], width: number, color = "#111111", weight = 700): string {
   const cols = Math.max(...lines.map((l) => l.length), 1);
   const cw = width / cols;
   const size = cw / 0.6;
@@ -226,6 +226,6 @@ export function artSVG(lines: string[], width: number, color = "#111111"): strin
     .join("");
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${r(width)}" height="${height}" viewBox="0 0 ${r(width)} ${height}" aria-hidden="true">` +
-    `<g font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="${r(size)}" fill="${color}" xml:space="preserve" style="white-space:pre">${rows}</g></svg>`
+    `<g font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="${r(size)}" font-weight="${weight}" fill="${color}" xml:space="preserve" style="white-space:pre">${rows}</g></svg>`
   );
 }
