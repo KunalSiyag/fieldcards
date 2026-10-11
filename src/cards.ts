@@ -28,13 +28,13 @@ export interface Deck {
 }
 
 /**
- * What each card shows above the text:
- * - "drawing" (default): Gemma's own drawing of what it saw, rendered as ASCII line art
+ * What each card shows:
+ * - "clue" (default): the clue in a +-[ #01 bird ]--+ frame, like the altsvg hero's alt-text card
+ * - "drawing": the same card with Gemma's own doodle of what it saw above the clue
  * - "photo": the photo itself, converted to characters
  * - "hint": a small, blurry version of the photo beside the clue
- * - "none": text cards only
  */
-export type ArtMode = "drawing" | "photo" | "hint" | "none";
+export type ArtMode = "clue" | "drawing" | "photo" | "hint";
 
 export interface RenderOptions {
   paper?: "a4" | "letter";
@@ -77,9 +77,9 @@ const cellsOf = (line: string, kind: CellKind): Cell[] => [...line].map((ch) => 
  * same grid is drawn as SVG on paper, printed in cards.txt, and animated in the
  * terminal, so all three always match.
  */
-export function drawingCard(card: Card, index: number, mode: Mode, cols: number): Cell[][] {
+export function drawingCard(card: Card, index: number, mode: Mode, cols: number, withDrawing = true): Cell[][] {
   const inner = cols - 2;
-  const art = card.drawing?.length ? rasterize(card.drawing, inner - 2, 12) : [];
+  const art = withDrawing && card.drawing?.length ? rasterize(card.drawing, inner - 2, 12) : [];
   const words = wrap(mode === "hunt" ? card.clue : card.subject, inner - 4);
 
   const tag = `[ ${num(index)} ${card.category} ]`;
@@ -127,8 +127,8 @@ function cardHTML(card: Card, index: number, mode: Mode, art: ArtMode): string {
   const label = `${num(index)} ${card.category}`;
   let body: string;
 
-  if (art === "drawing") {
-    const grid = drawingCard(card, index, mode, 46);
+  if (art === "drawing" || art === "clue") {
+    const grid = drawingCard(card, index, mode, 46, art === "drawing");
     body = `
       <div class="art drawing">${gridCardSVG(grid, CARD_PX, mode === "hunt" ? card.clue : card.subject)}</div>${mode === "guide" ? `<p class="desc">${esc(card.description)}</p>` : ""}${details(card)}`;
   } else if (art === "photo" && card.art?.length) {
@@ -178,12 +178,12 @@ function answerKey(deck: Deck): string {
 /** A print-first HTML page: six cards to a sheet, and an answer key for hunts. */
 export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   const paper = options.paper === "letter" ? "letter" : "A4";
-  const art: ArtMode = options.art ?? "drawing";
+  const art: ArtMode = options.art ?? "clue";
   const intro =
     deck.mode === "hunt"
       ? deck.cards.length === 1
         ? "Find the thing on this card. Tick it off when you spot the real thing."
-        : `Find all ${deck.cards.length}. Each card has a picture and a clue. Tick each one off when you spot the real thing.`
+        : `Find all ${deck.cards.length}. Each card has ${art === "clue" ? "a clue" : "a picture and a clue"}. Tick each one off when you spot the real thing.`
       : deck.cards.length === 1
         ? "One thing to look for. Tick it off when you spot it."
         : `${deck.cards.length} things to look for. Tick each one off when you spot it.`;
@@ -251,7 +251,7 @@ export function renderHTML(deck: Deck, options: RenderOptions = {}): string {
   <div class="grid">${deck.cards.map((c, i) => cardHTML(c, i, deck.mode, art)).join("")}
   </div>
   ${deck.mode === "hunt" ? answerKey(deck) : ""}
-  <p class="note">Made offline: ${esc(deck.model)} described the photos on this computer, and drew a picture of each one${art === "photo" ? "; the photos are printed in characters" : ""}. Look, don't pick: never eat or touch anything because a card says what it is.</p>
+  <p class="note">Made offline: ${esc(deck.model)} described the photos on this computer, and wrote each clue${art === "drawing" ? " and drew each doodle" : art === "photo" ? "; the photos are printed in characters" : ""}. Look, don't pick: never eat or touch anything because a card says what it is.</p>
 </main>
 </body>
 </html>
@@ -272,14 +272,14 @@ function hanging(prefix: string, text: string, cols: number): string[] {
  * One card as a block of cells for the terminal and cards.txt: the framed
  * picture and clue, then what to look for and where.
  */
-export function cardBlock(card: Card, index: number, mode: Mode, cols: number, art: ArtMode = "drawing"): Cell[][] {
+export function cardBlock(card: Card, index: number, mode: Mode, cols: number, art: ArtMode = "clue"): Cell[][] {
   const width = Math.max(24, cols);
   const label = `${num(index)} ${card.category}`;
   const block: Cell[][] = [];
   const plain = (lines: string[]) => block.push(...lines.map((l) => cellsOf(l, "plain")));
 
-  if (art === "drawing") {
-    block.push(...drawingCard(card, index, mode, width));
+  if (art === "drawing" || art === "clue") {
+    block.push(...drawingCard(card, index, mode, width, art === "drawing"));
     if (mode === "guide") plain(wrap(card.description, width));
   } else if (art === "photo" && card.art?.length) {
     block.push(...frameArt(fitArt(card.art, width - 2, 16), label).map((l) => cellsOf(l, "art")));
@@ -304,7 +304,7 @@ export function cardBlock(card: Card, index: number, mode: Mode, cols: number, a
  * Plain-text cards, `cols` characters wide. Prints on any printer, including
  * a 58 mm receipt printer at 32 columns.
  */
-export function renderText(deck: Deck, cols = 48, art: ArtMode = "drawing"): string {
+export function renderText(deck: Deck, cols = 48, art: ArtMode = "clue"): string {
   const width = Math.max(24, cols);
   const rule = "=".repeat(width);
   const out: string[] = [rule, ...wrap(deck.title.toUpperCase(), width), rule, ""];

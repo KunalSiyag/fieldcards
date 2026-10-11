@@ -167,7 +167,7 @@ describe("cards with photo art", () => {
     const hunt = renderHTML({ ...deck, mode: "hunt" }, { art: "photo" });
     assert.match(hunt, /class="art photo"/);
     assert.match(hunt, /\[ clue \]/, "the hunt clue sits under the photo");
-    assert.doesNotMatch(renderHTML(deck, { art: "none" }), /class="art photo"/);
+    assert.doesNotMatch(renderHTML(deck, { art: "clue" }), /class="art photo"/);
   });
 
   test("art: hint swaps the photo for a small, blurry hint", () => {

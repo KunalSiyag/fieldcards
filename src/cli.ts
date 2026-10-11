@@ -26,10 +26,11 @@ Options:
       --cols <n>         Width of cards.txt in characters (default 48; 32 for a receipt printer)
       --from <file>      Load cards from a deck.json instead of running the model
       --stdout           Also print the text cards to the terminal (pipe to "lp" to print them)
-      --art <style>      What each card shows: drawing (Gemma draws what it saw, default),
-                         photo (the photo in characters), hint (a small, blurry photo) or none
+      --art <style>      What each card shows: clue (the clue in an ASCII frame, default),
+                         drawing (plus Gemma's own doodle of what it saw), photo (the photo
+                         in characters) or hint (a small, blurry photo beside the clue)
       --no-anim          Plain progress lines instead of the animated cards
-      --no-art           Same as --art none
+      --no-art           Same as --art clue
       --hint-art         Same as --art hint
   -h, --help             Show this help
 
@@ -109,10 +110,11 @@ async function main(): Promise<void> {
   fs.mkdirSync(outDir, { recursive: true });
   const deckFile = path.join(outDir, "deck.json");
 
-  let art = (values["no-art"] ? "none" : values["hint-art"] ? "hint" : values.art ?? "drawing") as string;
+  let art = (values["no-art"] ? "clue" : values["hint-art"] ? "hint" : values.art ?? "clue") as string;
   if (art === "full") art = "photo";
+  if (art === "none") art = "clue";
   if (art === "sketch") art = "drawing";
-  if (!["drawing", "photo", "hint", "none"].includes(art)) fail("--art must be drawing, photo, hint or none");
+  if (!["clue", "drawing", "photo", "hint"].includes(art)) fail("--art must be clue, drawing, photo or hint");
   const artMode = art as ArtMode;
 
   // Animated cards in an interactive terminal; plain lines anywhere else.

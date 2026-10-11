@@ -100,13 +100,18 @@ describe("drawing cards", () => {
     assert.match(grid.map((r) => r.map((c) => c.ch).join("")).join("\n"), /sharp beak/);
   });
 
-  test("text and HTML output use the drawing by default", () => {
+  test("the clue card is the default; doodles are opt-in", () => {
     const deck: Deck = { title: "T", mode: "hunt", model: "gemma3:4b", createdAt: "2026-10-11T08:00:00.000Z", cards: [card(drawing)] };
+    const clueOnly = cardBlock(card(drawing), 0, "hunt", 40);
+    assert.ok(!clueOnly.some((row) => row.some((c) => c.kind === "art")), "no doodle by default");
+    assert.ok(clueOnly.some((row) => row.some((c) => c.kind === "text")));
+    assert.ok(cardBlock(card(drawing), 0, "hunt", 40, "drawing").some((row) => row.some((c) => c.kind === "art")));
     assert.match(renderHTML(deck), /class="art drawing"/);
-    for (const cols of [32, 48]) {
-      for (const line of renderText(deck, cols).split("\n")) assert.ok([...line].length <= cols, line);
+    for (const art of ["clue", "drawing"] as const) {
+      for (const cols of [32, 48]) {
+        for (const line of renderText(deck, cols, art).split("\n")) assert.ok([...line].length <= cols, line);
+      }
     }
-    assert.ok(cardBlock(card(drawing), 0, "hunt", 40).length > 8);
   });
 });
 
